@@ -21,7 +21,7 @@ public:
 
     void write(QJsonObject &json) const;
     void read(const QJsonObject &json);
-
+    
 private:
     typedef std::map<int,QPixmap> Mipmaps;
     Mipmaps backgroundImages;

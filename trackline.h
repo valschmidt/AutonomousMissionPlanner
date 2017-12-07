@@ -1,12 +1,12 @@
 #ifndef TRACKLINE_H
 #define TRACKLINE_H
 
-#include "geographicsitem.h"
+#include "geographicsmissionitem.h"
 
 class Waypoint;
 class QStandardItem;
 
-class TrackLine : public GeoGraphicsItem
+class TrackLine : public GeoGraphicsMissionItem
 {
     Q_OBJECT
     Q_INTERFACES(QGraphicsItem)
@@ -19,15 +19,16 @@ public:
     QPainterPath shape() const;
 
     Waypoint * createWaypoint();
-    void addWaypoint(QGeoCoordinate const &location);
+    Waypoint * addWaypoint(QGeoCoordinate const &location);
+    void removeWaypoint(Waypoint *wp);
 
     QList<Waypoint *> waypoints() const;
 
     void write(QJsonObject &json) const;
     void read(const QJsonObject &json);
-
-    void setItem(QStandardItem *item);
-
+    
+    int type() const override {return TrackLineType;}
+    
 signals:
     void trackLineUpdated();
 
@@ -35,8 +36,6 @@ public slots:
     void updateProjectedPoints();
 
 private:
-
-    QStandardItem * m_item;
 };
 
 #endif // TRACKLINE_H

@@ -4,6 +4,7 @@
 #include <QObject>
 
 class AutonomousVehicleProject;
+class QStandardItem;
 
 class MissionItem : public QObject
 {
@@ -13,12 +14,24 @@ public:
 
     virtual void write(QJsonObject &json) const = 0;
     virtual void read(const QJsonObject &json) = 0;
-
+    
     AutonomousVehicleProject *autonomousVehicleProject() const;
 
-signals:
+    QStandardItem * item() const;
+    QStandardItem * createItem(QString const &label);
+    
 
 public slots:
+    virtual void updateProjectedPoints();
+
+public slots:
+
+protected:
+
+    
+private:
+    QStandardItem *m_item;
+
 };
 
 #endif // MISSIONITEM_H

@@ -1,22 +1,30 @@
 #include "geographicsitem.h"
 #include "backgroundraster.h"
 #include "autonomousvehicleproject.h"
-#include <QGraphicsTextItem>
+#include "missionitem.h"
+#include <QGraphicsSimpleTextItem>
 #include <QFont>
+#include <QBrush>
+#include <QPen>
 
-GeoGraphicsItem::GeoGraphicsItem(QObject *parent, QGraphicsItem *parentItem):MissionItem(parent), QGraphicsItem(parentItem)
+GeoGraphicsItem::GeoGraphicsItem(QGraphicsItem *parentItem): QGraphicsItem(parentItem), m_showLabelFlag(false)
 {
-    m_label = new QGraphicsTextItem(this);
+    m_label = new QGraphicsSimpleTextItem(this);
     m_label->setFlag(GraphicsItemFlag::ItemIgnoresTransformations);
     auto font = m_label->font();
     font.setPointSize(20);
+    font.setBold(true);
     m_label->setFont(font);
-    m_label->setDefaultTextColor(QColor("blue"));
+    m_label->setBrush(QBrush(QColor("black")));
+    QPen p(QColor("white"));
+    p.setWidth(2);
+    m_label->setPen(p);
+    //m_label->setFlag(QGraphicsItem::ItemIsMovable); this caused other elements to move while trying to move the label!
 }
 
-QPointF GeoGraphicsItem::geoToPixel(const QGeoCoordinate &point) const
+QPointF GeoGraphicsItem::geoToPixel(const QGeoCoordinate &point, AutonomousVehicleProject *p) const
 {
-    AutonomousVehicleProject *p = autonomousVehicleProject();
+    //AutonomousVehicleProject *p;// =  dynamic_cast<MissionItem*>(this)->autonomousVehicleProject();
     if(p)
     {
         BackgroundRaster *bg = p->getBackgroundRaster();
@@ -34,13 +42,30 @@ QPointF GeoGraphicsItem::geoToPixel(const QGeoCoordinate &point) const
     return QPointF();
 }
 
-void GeoGraphicsItem::setItem(QStandardItem *item)
+void GeoGraphicsItem::prepareGeometryChange()
 {
-    m_item = item;
+    QGraphicsItem::prepareGeometryChange();
+}
+
+void GeoGraphicsItem::setLabel(const QString &label)
+{
+    m_labelText = label;
+    if(m_showLabelFlag)
+        m_label->setText(m_labelText);
 }
 
 
-QStandardItem * GeoGraphicsItem::item() const
+bool GeoGraphicsItem::showLabelFlag() const
 {
-    return m_item;
+    return m_showLabelFlag;
 }
+
+void GeoGraphicsItem::setShowLabelFlag(bool show)
+{
+    m_showLabelFlag = show;
+    if(show)
+        m_label->setText(m_labelText);
+    else
+        m_label->setText("");
+}
+

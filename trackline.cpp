@@ -6,7 +6,7 @@
 #include <QStandardItem>
 #include <QDebug>
 
-TrackLine::TrackLine(QObject *parent, QGraphicsItem *parentItem) :GeoGraphicsItem(parent, parentItem)
+TrackLine::TrackLine(QObject *parent, QGraphicsItem *parentItem) :GeoGraphicsMissionItem(parent, parentItem)
 {
 
 }
@@ -18,7 +18,7 @@ QRectF TrackLine::boundingRect() const
 
 void TrackLine::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget)
 {
-    auto children = childItems();
+    auto children = waypoints();
     if (children.length() > 1)
     {
         painter->save();
@@ -47,7 +47,7 @@ void TrackLine::paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
 
 QPainterPath TrackLine::shape() const
 {
-    auto children = childItems();
+    auto children = waypoints();
     if (children.length() > 1)
     {
         auto i = children.begin();
@@ -69,10 +69,9 @@ QPainterPath TrackLine::shape() const
 Waypoint * TrackLine::createWaypoint()
 {
     Waypoint *wp = new Waypoint(parent(),this);
+    //qDebug() << "create wp: " << (void *)wp;
 
-    QStandardItem *item = new QStandardItem("wayoint");
-    item->setData(QVariant::fromValue<Waypoint*>(wp));
-    m_item->appendRow(item);
+    item()->appendRow(wp->createItem("waypoint"));
 
     wp->setFlag(QGraphicsItem::ItemIsMovable);
     wp->setFlag(QGraphicsItem::ItemIsSelectable);
@@ -81,16 +80,20 @@ Waypoint * TrackLine::createWaypoint()
 
 }
 
-void TrackLine::addWaypoint(const QGeoCoordinate &location)
+Waypoint * TrackLine::addWaypoint(const QGeoCoordinate &location)
 {
-    qDebug() << "Trackline adding waypoint: " << location;
     Waypoint *wp = createWaypoint();
-    qDebug() << static_cast<const void *>(wp);
     wp->setLocation(location);
-    //wp->setPos(wp->geoToPixel(location));
     emit trackLineUpdated();
     update();
+    return wp;
 }
+
+void TrackLine::removeWaypoint(Waypoint* wp)
+{
+    wp->setParent(nullptr);
+}
+
 
 QList<Waypoint *> TrackLine::waypoints() const
 {
@@ -98,9 +101,13 @@ QList<Waypoint *> TrackLine::waypoints() const
     auto children = childItems();
     for(auto child: children)
     {
-        Waypoint *wp = qgraphicsitem_cast<Waypoint*>(child);
-        if(wp)
-            ret.append(wp);
+        if(child->type() == GeoGraphicsItem::WaypointType)
+        {
+            Waypoint *wp = qgraphicsitem_cast<Waypoint*>(child);
+            //qDebug() << child << " cast to " << (void *)wp << " type " << child->type();
+            if(wp)
+                ret.append(wp);
+        }
     }
     return ret;
 }
@@ -112,10 +119,13 @@ void TrackLine::write(QJsonObject &json) const
     auto children = childItems();
     for(auto child: children)
     {
-        Waypoint *wp = qgraphicsitem_cast<Waypoint*>(child);
-        QJsonObject wpObject;
-        wp->write(wpObject);
-        wpArray.append(wpObject);
+        if(child->type() == GeoGraphicsItem::WaypointType)
+        {
+            Waypoint *wp = qgraphicsitem_cast<Waypoint*>(child);
+            QJsonObject wpObject;
+            wp->write(wpObject);
+            wpArray.append(wpObject);
+        }
     }
     json["waypoints"] = wpArray;
 }
@@ -129,7 +139,7 @@ void TrackLine::read(const QJsonObject &json)
         if(wpIndex == 0)
         {
             QGeoCoordinate position(wpObject["latitude"].toDouble(),wpObject["longitude"].toDouble());
-            setPos(geoToPixel(position));
+            setPos(geoToPixel(position,autonomousVehicleProject()));
         }
         Waypoint *wp = createWaypoint();
         wp->read(wpObject);
@@ -137,13 +147,9 @@ void TrackLine::read(const QJsonObject &json)
 
 }
 
-void TrackLine::setItem(QStandardItem *item)
-{
-    m_item = item;
-}
-
 void TrackLine::updateProjectedPoints()
 {
     for(auto wp: waypoints())
         wp->updateProjectedPoints();
 }
+

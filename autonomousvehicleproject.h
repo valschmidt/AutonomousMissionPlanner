@@ -16,7 +16,10 @@ class Waypoint;
 class TrackLine;
 class SurveyPattern;
 class Platform;
-
+class QSvgRenderer;
+#ifdef AMP_ROS
+class ROSNode;
+#endif
 
 class AutonomousVehicleProject : public QObject
 {
@@ -41,20 +44,34 @@ public:
 
     Platform * createPlatform();
     Platform * currentPlatform() const;
+    
+#ifdef AMP_ROS
+    ROSNode * createROSNode();
+#else
+    void createROSNode();
+#endif
+
 
     QString const &filename() const;
     void save(QString const &fname = QString());
     void open(QString const &fname);
+    
+    void openGeometry(QString const &fname);
 
     void setCurrent(const QModelIndex &index);
+    
+    QSvgRenderer * symbols() const;
 
 signals:
     void currentPlaformUpdated();
+    void backgroundUpdated(BackgroundRaster *bg);
 
 public slots:
 
     void exportHypack(QModelIndex const &index);
     void deleteItems(QModelIndexList const &indices);
+    void deleteItem(QModelIndex const &index);
+    void deleteItem(QStandardItem *item);
 
 
 private:
@@ -63,6 +80,9 @@ private:
     QString m_filename;
     BackgroundRaster* m_currentBackground;
     Platform* m_currentPlatform;
+    
+    QSvgRenderer* m_symbols;
+    
 
     void setCurrentBackground(BackgroundRaster *bgr);
 };

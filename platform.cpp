@@ -28,3 +28,4 @@ void Platform::setSpeed(double speed)
     m_speed = speed;
     emit speedChanged();
 }
+

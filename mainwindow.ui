@@ -20,7 +20,7 @@
       <property name="orientation">
        <enum>Qt::Horizontal</enum>
       </property>
-      <widget class="QWidget" name="">
+      <widget class="QWidget" name="layoutWidget">
        <layout class="QVBoxLayout" name="verticalLayout">
         <item>
          <widget class="QTreeView" name="treeView">
@@ -32,6 +32,15 @@
           </property>
           <property name="contextMenuPolicy">
            <enum>Qt::CustomContextMenu</enum>
+          </property>
+          <property name="dragEnabled">
+           <bool>true</bool>
+          </property>
+          <property name="dragDropMode">
+           <enum>QAbstractItemView::InternalMove</enum>
+          </property>
+          <property name="defaultDropAction">
+           <enum>Qt::MoveAction</enum>
           </property>
           <attribute name="headerVisible">
            <bool>false</bool>
@@ -79,6 +88,7 @@
     </property>
     <addaction name="actionOpen"/>
     <addaction name="actionOpenBackground"/>
+    <addaction name="actionOpenGeometry"/>
     <addaction name="actionSave"/>
     <addaction name="actionSaveAs"/>
    </widget>
@@ -89,6 +99,7 @@
     <addaction name="actionWaypoint"/>
     <addaction name="actionTrackline"/>
     <addaction name="actionSurveyPattern"/>
+    <addaction name="actionROS_Node"/>
    </widget>
    <addaction name="menu_File"/>
    <addaction name="menu_Add"/>
@@ -105,6 +116,7 @@
    <addaction name="actionTrackline"/>
    <addaction name="actionSurveyPattern"/>
    <addaction name="actionPlatform"/>
+   <addaction name="actionROS_Node"/>
   </widget>
   <widget class="QStatusBar" name="statusBar"/>
   <action name="actionOpen">
@@ -163,6 +175,19 @@
    </property>
    <property name="toolTip">
     <string>Add Platform</string>
+   </property>
+  </action>
+  <action name="actionOpenGeometry">
+   <property name="text">
+    <string>Open &amp;Geometry</string>
+   </property>
+  </action>
+  <action name="actionROS_Node">
+   <property name="text">
+    <string>ROS Node</string>
+   </property>
+   <property name="iconText">
+    <string>ROS</string>
    </property>
   </action>
  </widget>

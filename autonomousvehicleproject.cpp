@@ -8,6 +8,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QSvgRenderer>
 
 #include "backgroundraster.h"
 #include "waypoint.h"
@@ -15,10 +16,15 @@
 #include "surveypattern.h"
 #include "platform.h"
 #include <gdal_priv.h>
+#include "vectordataset.h"
+
+#ifdef AMP_ROS
+#include "rosnode.h"
+#endif
 
 #include <iostream>
 
-AutonomousVehicleProject::AutonomousVehicleProject(QObject *parent) : QObject(parent), m_currentBackground(nullptr), m_currentPlatform(nullptr)
+AutonomousVehicleProject::AutonomousVehicleProject(QObject *parent) : QObject(parent), m_currentBackground(nullptr), m_currentPlatform(nullptr),m_symbols(new QSvgRenderer(QString(":/symbols.svg"),this))
 {
     GDALAllRegister();
 
@@ -46,6 +52,12 @@ QString const &AutonomousVehicleProject::filename() const
     return m_filename;
 }
 
+QSvgRenderer * AutonomousVehicleProject::symbols() const
+{
+    return m_symbols;
+}
+
+
 void AutonomousVehicleProject::save(const QString &fname)
 {
     QString saveName = fname;
@@ -60,7 +72,7 @@ void AutonomousVehicleProject::save(const QString &fname)
         QStandardItem *child = m_model->item(row);
         while(child)
         {
-            MissionItem *mi = child->data().value<MissionItem*>();
+            MissionItem* mi = reinterpret_cast<MissionItem*>(child->data().value<quintptr>());
             if(mi)
             {
                 QJsonObject miObject;
@@ -117,11 +129,18 @@ void AutonomousVehicleProject::open(const QString &fname)
 void AutonomousVehicleProject::openBackground(const QString &fname)
 {
     BackgroundRaster *bgr = new BackgroundRaster(fname, this);
-    QStandardItem *item = new QStandardItem(fname);
-    item->setData(QVariant::fromValue<BackgroundRaster*>(bgr));
-    m_model->appendRow(item);
+    m_model->appendRow(bgr->createItem(fname));
     setCurrentBackground(bgr);
 }
+
+void AutonomousVehicleProject::openGeometry(const QString& fname)
+{
+    VectorDataset * vd = new VectorDataset(this);
+    m_model->appendRow(vd->createItem(fname));
+    vd->open(fname);
+    connect(this,&AutonomousVehicleProject::backgroundUpdated,vd,&VectorDataset::updateProjectedPoints);
+}
+
 
 BackgroundRaster *AutonomousVehicleProject::getBackgroundRaster() const
 {
@@ -146,21 +165,30 @@ BackgroundRaster *AutonomousVehicleProject::getBackgroundRaster() const
 Platform * AutonomousVehicleProject::createPlatform()
 {
     Platform *p = new Platform(this);
-    QStandardItem *item = new QStandardItem("platform");
-    item->setData(QVariant::fromValue<Platform*>(p));
-    m_model->appendRow(item);
+    m_model->appendRow(p->createItem("platform"));
     return p;
 }
+
+#ifdef AMP_ROS
+ROSNode * AutonomousVehicleProject::createROSNode()
+{
+    ROSNode *rn = new ROSNode(this,getBackgroundRaster());
+    m_model->appendRow(rn->createItem("ROS"));
+    connect(this,&AutonomousVehicleProject::backgroundUpdated,rn,&ROSNode::updateBackground);
+    return rn;
+}
+#else
+void AutonomousVehicleProject::createROSNode()
+{
+}
+#endif
 
 Waypoint * AutonomousVehicleProject::createWaypoint(BackgroundRaster *parentItem)
 {
     if(!parentItem)
         parentItem = getBackgroundRaster();
     Waypoint *wp = new Waypoint(this,parentItem);
-
-    QStandardItem *item = new QStandardItem("wayoint");
-    item->setData(QVariant::fromValue<Waypoint*>(wp));
-    m_model->appendRow(item);
+    m_model->appendRow(wp->createItem("waypoint"));
     wp->setFlag(QGraphicsItem::ItemIsMovable);
     wp->setFlag(QGraphicsItem::ItemIsSelectable);
     wp->setFlag(QGraphicsItem::ItemSendsGeometryChanges);
@@ -173,6 +201,7 @@ void AutonomousVehicleProject::addWaypoint(QGeoCoordinate position, BackgroundRa
     Waypoint *wp = createWaypoint(parentItem);
     wp->setLocation(position);
     wp->setPos(parentItem->geoToPixel(position));
+    connect(this,&AutonomousVehicleProject::backgroundUpdated,wp,&Waypoint::updateBackground);
 }
 
 SurveyPattern * AutonomousVehicleProject::createSurveyPattern(BackgroundRaster *parentItem)
@@ -180,10 +209,7 @@ SurveyPattern * AutonomousVehicleProject::createSurveyPattern(BackgroundRaster *
     if(!parentItem)
         parentItem = getBackgroundRaster();
     SurveyPattern *sp = new SurveyPattern(this,parentItem);
-    QStandardItem *item = new QStandardItem("pattern");
-    item->setData(QVariant::fromValue<SurveyPattern*>(sp));
-    sp->setItem(item);
-    m_model->appendRow(item);
+    m_model->appendRow(sp->createItem("pattern"));
     sp->setFlag(QGraphicsItem::ItemIsMovable);
     sp->setFlag(QGraphicsItem::ItemIsSelectable);
     sp->setFlag(QGraphicsItem::ItemSendsGeometryChanges);
@@ -198,6 +224,7 @@ SurveyPattern *AutonomousVehicleProject::addSurveyPattern(QGeoCoordinate positio
     SurveyPattern *sp = createSurveyPattern();
     sp->setPos(parentItem->geoToPixel(position));
     sp->setStartLocation(position);
+    connect(this,&AutonomousVehicleProject::backgroundUpdated,sp,&SurveyPattern::updateBackground);
     return sp;
 }
 
@@ -206,10 +233,7 @@ TrackLine * AutonomousVehicleProject::createTrackLine(BackgroundRaster *parentIt
     if(!parentItem)
         parentItem = getBackgroundRaster();
     TrackLine *tl = new TrackLine(this,parentItem);
-    QStandardItem *item = new QStandardItem("trackline");
-    item->setData(QVariant::fromValue<TrackLine*>(tl));
-    m_model->appendRow(item);
-    tl->setItem(item);
+    m_model->appendRow(tl->createItem("trackline"));
     tl->setFlag(QGraphicsItem::ItemIsMovable);
     tl->setFlag(QGraphicsItem::ItemIsSelectable);
     tl->setFlag(QGraphicsItem::ItemSendsGeometryChanges);
@@ -222,6 +246,7 @@ TrackLine * AutonomousVehicleProject::addTrackLine(QGeoCoordinate position, Back
     TrackLine *tl = createTrackLine(parentItem);
     tl->setPos(parentItem->geoToPixel(position));
     tl->addWaypoint(position);
+    connect(this,&AutonomousVehicleProject::backgroundUpdated,tl,&TrackLine::updateBackground);
     return tl;
 }
 
@@ -265,81 +290,67 @@ void AutonomousVehicleProject::exportHypack(const QModelIndex &index)
             if(outfile.open(QFile::WriteOnly))
             {
                 int arcCount = sp->arcCount();
-                QList<QGeoCoordinate> wpList = sp->getPath();
-                int lineCount = wpList.size()/2;
-                if(arcCount > 2)
-                {
-                    lineCount = 1 + wpList.size()/(arcCount+1);
-                }
-
+                auto lines = sp->getLines();
                 QTextStream outstream(&outfile);
                 outstream.setRealNumberPrecision(8);
-                if(arcCount > 2)
-                    outstream << "LNS " << lineCount*2-1 << "\n";
-                else
-                    outstream << "LNS " << lineCount << "\n";
-                for(int i = 0; i < lineCount; i++)
+                outstream << "LNS " << lines.length() << "\n";
+                int lineNum = 1;
+                for (auto l: lines)
                 {
-                    if(arcCount > 2)
-                    {
-                        outstream << "LIN 2\n";
-                        outstream << "PTS " << wpList[i*(arcCount+1)].latitude() << " " << wpList[i*(arcCount+1)].longitude() << "\n";
-                        outstream << "PTS " << wpList[i*(arcCount+1)+1].latitude() << " " << wpList[i*(arcCount+1)+1].longitude() << "\n";
-                        outstream << "LNN " << i << "\n";
-                        outstream << "EOL\n";
-                        if (i < lineCount-1)
-                        {
-                            outstream << "LIN " << arcCount-1 << "\n";
-                            for(int j = 0; j < arcCount-1; j++)
-                            {
-                                outstream << "PTS " << wpList[i*(arcCount+1)+j+2].latitude() << " " << wpList[i*(arcCount+1)+j+2].longitude() << "\n";
-                            }
-                            outstream << "LNN ARC" << i << "\n";
-                            outstream << "EOL\n";
-                        }
-                    }
-                    else
-                    {
-                        outstream << "LIN 2\n";
-                        outstream << "PTS " << wpList[i*2].latitude() << " " << wpList[i*2].longitude() << "\n";
-                        outstream << "PTS " << wpList[i*2+1].latitude() << " " << wpList[i*2+1].longitude() << "\n";
-                        outstream << "LNN " << i << "\n";
-                        outstream << "EOL\n";
-                    }
+                    outstream << "LIN " << l.length() << "\n";
+                    for (auto p:l)
+                        outstream << "PTS " << p.latitude() << " " << p.longitude() << "\n";
+                    outstream << "LNN " << lineNum << "\n";
+                    lineNum++;
+                    outstream << "EOL\n";
                 }
             }
         }
     }
-
 }
 
 void AutonomousVehicleProject::deleteItems(const QModelIndexList &indices)
 {
     for(auto index: indices)
-    {
-        QStandardItem *item = m_model->itemFromIndex(index);
-        GeoGraphicsItem *ggi = item->data().value<GeoGraphicsItem*>();
-        if(ggi)
-            m_scene->removeItem(ggi);
-        BackgroundRaster *bgr = item->data().value<BackgroundRaster*>();
-        if(bgr)
-        {
-            m_scene->removeItem(bgr);
-            if(m_currentBackground == bgr)
-                m_currentBackground = nullptr;
-        }
+        deleteItem(index);
+}
 
-        m_model->removeRow(index.row());
+void AutonomousVehicleProject::deleteItem(const QModelIndex &index)
+{
+    QStandardItem *item = m_model->itemFromIndex(index);
+    GeoGraphicsItem *ggi = item->data().value<GeoGraphicsItem*>();
+    if(ggi)
+    {
+        GeoGraphicsItem *pggi = qgraphicsitem_cast<GeoGraphicsItem*>(ggi->parentItem());
+        if(pggi)
+            pggi->prepareGeometryChange();
+        m_scene->removeItem(ggi);
     }
+    BackgroundRaster *bgr = item->data().value<BackgroundRaster*>();
+    if(bgr)
+    {
+        m_scene->removeItem(bgr);
+        if(m_currentBackground == bgr)
+            m_currentBackground = nullptr;
+    }
+    m_model->removeRow(index.row(),index.parent());
+}
+
+void AutonomousVehicleProject::deleteItem(QStandardItem *item)
+{
+    deleteItem(m_model->indexFromItem(item));
 }
 
 void AutonomousVehicleProject::setCurrent(const QModelIndex &index)
 {
-    QStandardItem *item = m_model->itemFromIndex(index);
-    BackgroundRaster *bgr = item->data().value<BackgroundRaster*>();
+    QVariant item = m_model->data(index,Qt::UserRole+1);
+    MissionItem* mi = reinterpret_cast<MissionItem*>(item.value<quintptr>());
+    QString itemType = mi->metaObject()->className();
+
+    BackgroundRaster *bgr = qobject_cast<BackgroundRaster*>(mi);
     if(bgr)
         setCurrentBackground(bgr);
-    Platform *p = item->data().value<Platform*>();
+    Platform *p = qobject_cast<Platform*>(mi);
     if(p && p != m_currentPlatform)
     {
         m_currentPlatform = p;
@@ -356,16 +367,7 @@ void AutonomousVehicleProject::setCurrentBackground(BackgroundRaster *bgr)
     if(bgr)
     {
         m_scene->addItem(bgr);
-        for(int i = 0; i < m_model->rowCount(); ++i)
-        {
-            QStandardItem *item = m_model->item(i);
-            GeoGraphicsItem *ggi = item->data().value<GeoGraphicsItem*>();
-            if(ggi)
-            {
-                ggi->setParentItem(bgr);
-                ggi->updateProjectedPoints();
-            }
-        }
+        emit backgroundUpdated(bgr);
     }
 }
 

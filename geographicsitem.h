@@ -1,39 +1,48 @@
 #ifndef GEOGRAPHICSITEM_H
 #define GEOGRAPHICSITEM_H
 
-#include "missionitem.h"
 #include <QGraphicsItem>
 #include <QGeoCoordinate>
 
 class AutonomousVehicleProject;
-class QStandardItem;
-class QGrpahicsTextItem;
+class BackgroundRaster;
 
-class GeoGraphicsItem : public MissionItem, public QGraphicsItem
+class GeoGraphicsItem : public QGraphicsItem
 {
-    Q_OBJECT
     Q_INTERFACES(QGraphicsItem)
 
 public:
-    GeoGraphicsItem(QObject *parent = 0, QGraphicsItem *parentItem = Q_NULLPTR);
+    enum {  BackgroundRasterType = UserType+1,
+            WaypointType,
+            TrackLineType,
+            SurveyPatternType,
+            PointType,
+            LineStringType,
+            PolygonType,
+            ROSNodeType
+    };
+    
+    GeoGraphicsItem(QGraphicsItem *parentItem = Q_NULLPTR);
 
-    QPointF geoToPixel(QGeoCoordinate const &point) const;
+    
+    QPointF geoToPixel(QGeoCoordinate const &point, AutonomousVehicleProject *p) const;
     QGeoCoordinate pixelToGeo(QPointF const &point) const;
 
-    virtual void write(QJsonObject &json) const = 0;
-    virtual void read(const QJsonObject &json) = 0;
+    void prepareGeometryChange();
 
-    void setItem(QStandardItem * item);
-    QStandardItem * item() const;
-
-public slots:
-    virtual void updateProjectedPoints() =0;
-
-protected:
-    QGraphicsTextItem *m_label;
+    bool showLabelFlag() const;
+    void setShowLabelFlag(bool show=true);
+    void setLabel(QString const &label);
+    
+    int type() const override=0;
 
 private:
-    QStandardItem *m_item;
+    QGraphicsSimpleTextItem *m_label;
+    QString m_labelText;
+    bool m_showLabelFlag;
+
 };
+
+Q_DECLARE_METATYPE(GeoGraphicsItem*)
 
 #endif // GEOGRAPHICSITEM_H

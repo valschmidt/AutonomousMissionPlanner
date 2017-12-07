@@ -11,7 +11,7 @@ public:
 
     void write(QJsonObject &json) const;
     void read(const QJsonObject &json);
-
+    
     double speed() const;
     void setSpeed(double speed);
 signals:
