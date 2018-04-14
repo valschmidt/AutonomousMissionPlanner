@@ -8,6 +8,8 @@
 #include "autonomousvehicleproject.h"
 #include "waypoint.h"
 
+#include <modeltest.h>
+
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow)
@@ -15,8 +17,10 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->setupUi(this);
     GDALAllRegister();
     project = new AutonomousVehicleProject(this);
+    
+    new ModelTest(project,this);
 
-    ui->treeView->setModel(project->model());
+    ui->treeView->setModel(project);
     ui->projectView->setStatusBar(statusBar());
     ui->projectView->setProject(project);
 
@@ -64,6 +68,11 @@ void MainWindow::on_treeView_customContextMenuRequested(const QPoint &pos)
 
     QAction *exportAction = menu.addAction("Export");
     connect(exportAction, &QAction::triggered, this, &MainWindow::exportHypack);
+    
+#ifdef AMP_ROS
+    QAction *sendToROSAction = menu.addAction("Send to ROS");
+    connect(sendToROSAction, &QAction::triggered, this, &MainWindow::sendToROS);
+#endif
 
     QAction *openBackgroundAction = menu.addAction("Open Background");
     connect(openBackgroundAction, &QAction::triggered, this, &MainWindow::on_actionOpenBackground_triggered);
@@ -77,6 +86,9 @@ void MainWindow::on_treeView_customContextMenuRequested(const QPoint &pos)
     QAction *addSurveyPatternAction = menu.addAction("Add Survey Pattern");
     connect(addSurveyPatternAction, &QAction::triggered, this, &MainWindow::on_actionSurveyPattern_triggered);
 
+    QAction *addGroupAction = menu.addAction("Add Group");
+    connect(addGroupAction, &QAction::triggered, this, &MainWindow::on_actionGroup_triggered);
+    
     QAction *addPlatformAction = menu.addAction("Add Platform");
     connect(addPlatformAction, &QAction::triggered, this, &MainWindow::on_actionPlatform_triggered);
 
@@ -93,6 +105,12 @@ void MainWindow::exportHypack() const
 {
     project->exportHypack(ui->treeView->selectionModel()->currentIndex());
 }
+
+void MainWindow::sendToROS() const
+{
+    project->sendToROS(ui->treeView->selectionModel()->currentIndex());
+}
+
 
 void MainWindow::on_actionSave_triggered()
 {
@@ -135,4 +153,9 @@ void MainWindow::on_actionOpenGeometry_triggered()
 void MainWindow::on_actionROS_Node_triggered()
 {
     project->createROSNode();
+}
+
+void MainWindow::on_actionGroup_triggered()
+{
+    project->addGroup();
 }

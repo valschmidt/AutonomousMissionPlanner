@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.6.3)
+cmake_minimum_required(VERSION 3.5.1)
 
 project(AutonomousMissionPlanner)
 
@@ -6,7 +6,15 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
-find_package(Qt5 COMPONENTS Core Widgets)
+find_package(Qt5 COMPONENTS Core Widgets Test)
+
+if (Qt5Widgets_FOUND)
+    if (Qt5Widgets_VERSION VERSION_LESS 5.6.0)
+        message(FATAL_ERROR "Minimum supported Qt5 version is 5.6!")
+    endif()
+else()
+    message(SEND_ERROR "The Qt5Widgets library could not be found!")
+endif(Qt5Widgets_FOUND)
 
 find_package(GDAL REQUIRED)
 include_directories(${GDAL_INCLUDE_DIR})
@@ -49,6 +57,7 @@ set(SOURCES
     linestring.cpp
     polygon.cpp
     geographicsmissionitem.cpp
+    modeltest.cpp
 )
 
 set(HEADERS
@@ -78,8 +87,8 @@ set(HEADERS
 )
 
 if(AMP_USE_ROS)
-    list(APPEND SOURCES rosnode.cpp)
-    list(APPEND HEADERS rosnode.h)
+    list(APPEND SOURCES rosnode.cpp rosnodedetails.cpp)
+    list(APPEND HEADERS rosnode.h rosnodedetails.h)
 endif()
 
 set ( RESOURCES
@@ -88,7 +97,7 @@ set ( RESOURCES
 
 add_executable(AutonomousMissionPlanner ${HEADERS} ${SOURCES} ${RESOURCES})
 
-qt5_use_modules(AutonomousMissionPlanner Widgets Positioning Svg)
+qt5_use_modules(AutonomousMissionPlanner Widgets Positioning Svg Test)
 
 target_link_libraries(AutonomousMissionPlanner ${QT_LIBRARIES} ${GDAL_LIBRARY} ${catkin_LIBRARIES})
 
