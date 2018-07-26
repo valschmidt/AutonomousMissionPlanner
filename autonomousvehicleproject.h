@@ -16,11 +16,12 @@ class BackgroundRaster;
 class Waypoint;
 class TrackLine;
 class SurveyPattern;
+class SurveyArea;
 class Platform;
 class Group;
 class QSvgRenderer;
 #ifdef AMP_ROS
-class ROSNode;
+class ROSLink;
 #endif
 
 
@@ -40,6 +41,9 @@ public:
 
     SurveyPattern * createSurveyPattern();
     SurveyPattern * addSurveyPattern(QGeoCoordinate position);
+    
+    SurveyArea * createSurveyArea();
+    SurveyArea * addSurveyArea(QGeoCoordinate position);
 
     TrackLine * createTrackLine();
     TrackLine * addTrackLine(QGeoCoordinate position);
@@ -68,24 +72,20 @@ public:
     QStringList mimeTypes() const override;
     QMimeData * mimeData(const QModelIndexList & indexes) const override;
     bool dropMimeData(const QMimeData * data, Qt::DropAction action, int row, int column, const QModelIndex & parent) override;
-    
-    
-#ifdef AMP_ROS
-    ROSNode * createROSNode();
-#else
-    void createROSNode();
-#endif
-
 
     QString const &filename() const;
     void save(QString const &fname = QString());
     void open(QString const &fname);
     
     void openGeometry(QString const &fname);
+    
+    void import(QString const &fname);
 
     void setCurrent(const QModelIndex &index);
     
     QSvgRenderer * symbols() const;
+    
+    ROSLink * rosLink() const;
 
 signals:
     void currentPlaformUpdated();
@@ -109,7 +109,7 @@ private:
     Group* m_root;
     MissionItem * m_currentSelected;
 #ifdef AMP_ROS
-    ROSNode* m_currentROSNode;
+    ROSLink* m_ROSLink;
 #endif
     
     QSvgRenderer* m_symbols;

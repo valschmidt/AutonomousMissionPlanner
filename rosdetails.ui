@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>ROSNodeDetails</class>
- <widget class="QWidget" name="ROSNodeDetails">
+ <class>ROSDetails</class>
+ <widget class="QWidget" name="ROSDetails">
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>171</width>
-    <height>122</height>
+    <width>420</width>
+    <height>534</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -38,6 +38,9 @@
       <string>Loiter</string>
      </property>
     </widget>
+   </item>
+   <item>
+    <widget class="QTextBrowser" name="vehicleStatusTextBrowser"/>
    </item>
   </layout>
  </widget>

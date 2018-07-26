@@ -9,9 +9,13 @@
 #include "waypoint.h"
 #include "trackline.h"
 #include "surveypattern.h"
+#include "surveyarea.h"
+#include <QDebug>
+#include <QMenu>
+#include "roslink.h"
 
 ProjectView::ProjectView(QWidget *parent) : QGraphicsView(parent),
-    statusBar(0), positionLabel(new QLabel()), modeLabel(new QLabel()), mouseMode(MouseMode::pan), currentTrackLine(nullptr), pendingSurveyPattern(nullptr), pendingTrackLineWaypoint(nullptr)
+    statusBar(0), positionLabel(new QLabel()), modeLabel(new QLabel()), mouseMode(MouseMode::pan), currentTrackLine(nullptr), pendingTrackLineWaypoint(nullptr), pendingSurveyPattern(nullptr), pendingSurveyArea(nullptr),pendingSurveyAreaWaypoint(nullptr)
 {
 
     positionLabel->setText("(,)");
@@ -25,6 +29,7 @@ void ProjectView::wheelEvent(QWheelEvent *event)
         scale(.8,.8);
     if(event->angleDelta().y()>0)
         scale(1.25,1.25);
+    emit scaleChanged(matrix().m11());
     event->accept();
 }
 
@@ -82,10 +87,23 @@ void ProjectView::mousePressEvent(QMouseEvent *event)
                 }
             }
             break;
+        case MouseMode::addSurveyArea:
+            if(!pendingSurveyArea)
+            {
+                if(bg)
+                {
+                    pendingSurveyArea = m_project->addSurveyArea(bg->pixelToGeo(mapToScene(event->pos())));
+                    pendingSurveyAreaWaypoint = pendingSurveyArea->addWaypoint(bg->pixelToGeo(mapToScene(event->pos())));
+                }
+            }
+            else
+            {
+                pendingSurveyAreaWaypoint = pendingSurveyArea->addWaypoint(bg->pixelToGeo(mapToScene(event->pos())));
+            }
         }
         break;
     case Qt::RightButton:
-        if(mouseMode == MouseMode::addTrackline || mouseMode == MouseMode::addWaypoint || mouseMode == MouseMode::addSurveyPattern)
+        if(mouseMode == MouseMode::addTrackline || mouseMode == MouseMode::addWaypoint || mouseMode == MouseMode::addSurveyPattern || mouseMode == MouseMode::addSurveyArea)
         {
             if(mouseMode == MouseMode::addTrackline && currentTrackLine)
             {
@@ -95,7 +113,17 @@ void ProjectView::mousePressEvent(QMouseEvent *event)
                 pendingTrackLineWaypoint = nullptr;
                 update();
             }
+            if(mouseMode == MouseMode::addSurveyArea && pendingSurveyArea)
+            {
+                m_project->scene()->removeItem(pendingSurveyAreaWaypoint);
+                m_project->deleteItem(pendingSurveyAreaWaypoint);
+                m_project->scene()->update();
+                pendingSurveyAreaWaypoint = nullptr;
+                pendingSurveyArea = nullptr;
+                update();
+            }
             setPanMode();
+            event->accept();
         }
         break;
     default:
@@ -126,6 +154,10 @@ void ProjectView::mouseMoveEvent(QMouseEvent *event)
         if(pendingTrackLineWaypoint)
         {
             pendingTrackLineWaypoint->setLocation(bg->pixelToGeo(mapToScene(event->pos())));
+        }
+        if(pendingSurveyAreaWaypoint)
+        {
+            pendingSurveyAreaWaypoint->setLocation(bg->pixelToGeo(mapToScene(event->pos())));
         }
     }
     positionLabel->setText(posText);
@@ -164,14 +196,20 @@ void ProjectView::setAddSurveyPatternMode()
     setCursor(Qt::CrossCursor);
 }
 
+void ProjectView::setAddSurveyAreaMode()
+{
+    setDragMode(NoDrag);
+    mouseMode = MouseMode::addSurveyArea;
+    modeLabel->setText("Mode: add survey area");
+    setCursor(Qt::CrossCursor);
+}
+
 void ProjectView::setStatusBar(QStatusBar *bar)
 {
     statusBar = bar;
     statusBar->addWidget(positionLabel);
     statusBar->addPermanentWidget(modeLabel);
 }
-
-
 
 void ProjectView::setProject(AutonomousVehicleProject *project)
 {
@@ -187,4 +225,44 @@ void ProjectView::setPanMode()
     unsetCursor();
     pendingSurveyPattern = nullptr;
     currentTrackLine = nullptr;
+}
+
+void ProjectView::contextMenuEvent(QContextMenuEvent* event)
+{
+    BackgroundRaster *bg = m_project->getBackgroundRaster();
+    if(bg)
+    {
+        m_contextMenuLocation = bg->pixelToGeo(bg->mapFromParent(mapToScene(event->pos())));
+        qDebug() << m_contextMenuLocation;
+        QMenu menu(this);
+
+#ifdef AMP_ROS
+        QAction *loiterAtAction = menu.addAction("Loiter Here");
+        connect(loiterAtAction, &QAction::triggered, this, &ProjectView::sendLoiterAt);
+
+        QAction *gotoAction = menu.addAction("Goto Here");
+        connect(gotoAction, &QAction::triggered, this, &ProjectView::sendGotoAt);
+#endif
+
+        menu.exec(event->globalPos());
+    }
+    event->accept();
+
+}
+
+void ProjectView::sendLoiterAt()
+{
+    m_project->rosLink()->sendLoiter(m_contextMenuLocation);
+    m_project->rosLink()->setHelmMode("loiter");
+}
+
+void ProjectView::sendGotoAt()
+{
+    m_project->rosLink()->sendGoto(m_contextMenuLocation);
+    m_project->rosLink()->setHelmMode("survey");
+}
+
+void ProjectView::updateBackground(BackgroundRaster* bg)
+{
+    setSceneRect(bg->boundingRect());
 }

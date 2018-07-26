@@ -7,8 +7,9 @@
 
 #include "autonomousvehicleproject.h"
 #include "waypoint.h"
-
+#include "roslink.h"
 #include <modeltest.h>
+#include "backgroundraster.h"
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -27,9 +28,17 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->detailsView->setProject(project);
     connect(ui->treeView->selectionModel(),&QItemSelectionModel::currentChanged,ui->detailsView,&DetailsView::onCurrentItemChanged);
 
+    connect(project, &AutonomousVehicleProject::backgroundUpdated, ui->projectView, &ProjectView::updateBackground);
 
     connect(ui->projectView,&ProjectView::currentChanged,this,&MainWindow::setCurrent);
 
+    ui->rosDetails->setEnabled(false);
+    connect(project->rosLink(), &ROSLink::rosConnected,this,&MainWindow::onROSConnected);
+    ui->rosDetails->setROSLink(project->rosLink());
+
+    connect(ui->projectView,&ProjectView::scaleChanged,project->rosLink(),&ROSLink::updateMapScale);
+
+    project->rosLink()->connectROS();
 }
 
 MainWindow::~MainWindow()
@@ -46,9 +55,18 @@ void MainWindow::setCurrent(QModelIndex &index)
 void MainWindow::on_actionOpen_triggered()
 {
     QString fname = QFileDialog::getOpenFileName(this,tr("Open"));
-
+    setCursor(Qt::WaitCursor);
     project->open(fname);
+    unsetCursor();
 }
+
+void MainWindow::on_actionImport_triggered()
+{
+    QString fname = QFileDialog::getOpenFileName(this,tr("Import"));
+
+    project->import(fname);
+}
+
 
 void MainWindow::on_actionWaypoint_triggered()
 {
@@ -125,16 +143,25 @@ void MainWindow::on_actionSaveAs_triggered()
 
 void MainWindow::on_actionOpenBackground_triggered()
 {
-    QString fname = QFileDialog::getOpenFileName(this,tr("Open"),"/home/roland/data/BSB_ROOT/13283");
+    QString fname = QFileDialog::getOpenFileName(this,tr("Open"));//,"/home/roland/data/BSB_ROOT/13283");
 
     if(!fname.isEmpty())
+    {
+        setCursor(Qt::WaitCursor);
         project->openBackground(fname);
+        unsetCursor();
+    }
 
 }
 
 void MainWindow::on_actionSurveyPattern_triggered()
 {
     ui->projectView->setAddSurveyPatternMode();
+}
+
+void MainWindow::on_actionSurveyArea_triggered()
+{
+    ui->projectView->setAddSurveyAreaMode();
 }
 
 void MainWindow::on_actionPlatform_triggered()
@@ -150,12 +177,14 @@ void MainWindow::on_actionOpenGeometry_triggered()
         project->openGeometry(fname);
 }
 
-void MainWindow::on_actionROS_Node_triggered()
-{
-    project->createROSNode();
-}
-
 void MainWindow::on_actionGroup_triggered()
 {
     project->addGroup();
 }
+
+void MainWindow::onROSConnected(bool connected)
+{
+    ui->rosDetails->setEnabled(connected);
+}
+
+

@@ -2,13 +2,16 @@
 #define PROJECTVIEW_H
 
 #include<QGraphicsView>
+#include <QGeoCoordinate>
 
 class QStatusBar;
 class QLabel;
 class AutonomousVehicleProject;
 class TrackLine;
 class SurveyPattern;
+class SurveyArea;
 class Waypoint;
+class BackgroundRaster;
 
 class ProjectView : public QGraphicsView
 {
@@ -19,21 +22,28 @@ public:
     void setAddWaypointMode();
     void setAddTracklineMode();
     void setAddSurveyPatternMode();
+    void setAddSurveyAreaMode();
     void setPanMode();
     void setProject(AutonomousVehicleProject *project);
 signals:
     void currentChanged(QModelIndex &index);
+    void scaleChanged(qreal scale);
 
 public slots:
+    void sendLoiterAt();
+    void sendGotoAt();
+    void updateBackground(BackgroundRaster * bg);
+
 
 protected:
-    void wheelEvent(QWheelEvent *event) Q_DECL_OVERRIDE;
-    void mousePressEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
-    void mouseMoveEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
-    void mouseReleaseEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
+    void wheelEvent(QWheelEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
+    void contextMenuEvent(QContextMenuEvent *event) override;
 
 private:
-    enum class MouseMode {pan, addWaypoint, addTrackline, addSurveyPattern};
+    enum class MouseMode {pan, addWaypoint, addTrackline, addSurveyPattern, addSurveyArea};
     QStatusBar * statusBar;
     QLabel * positionLabel;
     QLabel * modeLabel;
@@ -42,6 +52,10 @@ private:
     TrackLine * currentTrackLine;
     Waypoint * pendingTrackLineWaypoint;
     SurveyPattern * pendingSurveyPattern;
+    SurveyArea * pendingSurveyArea;
+    Waypoint * pendingSurveyAreaWaypoint;
+
+    QGeoCoordinate m_contextMenuLocation;
 
 };
 
