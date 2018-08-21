@@ -20,7 +20,8 @@ public:
             LineStringType,
             PolygonType,
             ROSLinkType,
-            SurveyAreaType
+            SurveyAreaType,
+            MeasuringToolType
     };
     
     GeoGraphicsItem(QGraphicsItem *parentItem = Q_NULLPTR);
@@ -34,14 +35,15 @@ public:
     bool showLabelFlag() const;
     void setShowLabelFlag(bool show=true);
     void setLabel(QString const &label);
+    void setLabelPosition(QPointF pos);
     
     int type() const override=0;
-
+  
 private:
     QGraphicsSimpleTextItem *m_label;
     QString m_labelText;
     bool m_showLabelFlag;
-
+    
 };
 
 Q_DECLARE_METATYPE(GeoGraphicsItem*)

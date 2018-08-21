@@ -8,8 +8,10 @@
 #include "marine_msgs/NavEulerStamped.h"
 #include "marine_msgs/Heartbeat.h"
 #include "ros/ros.h"
-#include "asv_msgs/AISContact.h"
+#include "marine_msgs/Contact.h"
 #include "std_msgs/String.h"
+#include "std_msgs/Float32.h"
+#include "geometry_msgs/TwistStamped.h"
 
 
 Q_DECLARE_METATYPE(ros::Time);
@@ -21,6 +23,7 @@ struct ROSAISContact: public QObject
     Q_OBJECT
 public:
     ROSAISContact(QObject *parent = nullptr);
+    ros::Time timestamp;
     uint32_t mmsi;
     std::string name;
     QGeoCoordinate location;
@@ -33,7 +36,7 @@ public:
 };
 
 
-class ROSLink : public QObject, GeoGraphicsItem
+class ROSLink : public QObject, public GeoGraphicsItem
 {
     Q_OBJECT
     Q_INTERFACES(QGraphicsItem)
@@ -76,16 +79,20 @@ public slots:
     void updatePosmvHeading(double heading);
     void updateBaseHeading(double heading);
     void updateBackground(BackgroundRaster *bgr);
+    void updateViewPoint(QGeoCoordinate view_point, QPointF local_view_point, bool view_point_active);
+    void updateViewPolygon(QList<QGeoCoordinate> view_polygon, QList<QPointF> local_view_polygon, bool view_polygon_active);
+    void updateViewSeglist(QList<QGeoCoordinate> view_seglist, QList<QPointF> local_view_seglist, bool view_seglist_active);
     void recalculatePositions();
     void addAISContact(ROSAISContact *c);
     void sendWaypoints(QList<QGeoCoordinate> const &waypoints);
     void sendMissionPlan(QString const &plan);
     void sendLoiter(QGeoCoordinate const &loiterLocation);
     void sendGoto(QGeoCoordinate const &loiterLocation);
+    void sendWaypointIndexUpdate(int waypoint_index);
     void connectROS();
     void updateHeartbeatTimes(ros::Time const &last_heartbeat_timestamp, ros::Time const &last_heartbeat_receive_time);
     void watchdogUpdate();
-    void updateMapScale(qreal scale);
+    void updateSog(qreal sog);
     
 private:
     void geoPointStampedCallback(const geographic_msgs::GeoPointStamped::ConstPtr& message);
@@ -93,13 +100,16 @@ private:
     void originCallback(const geographic_msgs::GeoPoint::ConstPtr& message);
     void headingCallback(const marine_msgs::NavEulerStamped::ConstPtr& message);
     void baseHeadingCallback(const marine_msgs::NavEulerStamped::ConstPtr& message);
-    void aisCallback(const asv_msgs::AISContact::ConstPtr& message);
+    void contactCallback(const marine_msgs::Contact::ConstPtr& message);
     void heartbeatCallback(const marine_msgs::Heartbeat::ConstPtr& message);
     void viewPointCallback(const std_msgs::String::ConstPtr&message);
     void viewPolygonCallback(const std_msgs::String::ConstPtr&message);
     void viewSeglistCallback(const std_msgs::String::ConstPtr&message);
     void posmvOrientationCallback(const marine_msgs::NavEulerStamped::ConstPtr& message);
     void posmvPositionCallback(const sensor_msgs::NavSatFix::ConstPtr& message);
+    void rangeCallback(const std_msgs::Float32::ConstPtr& message);
+    void bearingCallback(const std_msgs::Float32::ConstPtr& message);
+    void sogCallback(const geometry_msgs::TwistStamped::ConstPtr& message);
     
     void drawTriangle(QPainterPath &path, QGeoCoordinate const &location, double heading_degrees, double scale=1.0) const;
     void drawShipOutline(QPainterPath &path, QGeoCoordinate const &location, double heading_degrees, float dimension_to_bow, float dimension_to_port, float dimension_to_stbd, float dimension_to_stern) const;
@@ -123,6 +133,9 @@ private:
     ros::Subscriber m_view_seglist_subscriber;
     ros::Subscriber m_posmv_position;
     ros::Subscriber m_posmv_orientation;
+    ros::Subscriber m_range_subscriber;
+    ros::Subscriber m_bearing_subscriber;
+    ros::Subscriber m_sog_subscriber;
     
     ros::Publisher m_active_publisher;
     ros::Publisher m_helmMode_publisher;
@@ -172,8 +185,14 @@ private:
     
     QTimer * m_watchdog_timer;
     
-    qreal m_map_scale;
-    qreal m_pixel_size;
+    double m_range;
+    ros::Time m_range_timestamp;
+    double m_bearing;
+    ros::Time m_bearing_timestamp;
+    
+    QList<qreal> m_sog_history;
+    qreal m_sog;
+    qreal m_sog_avg;
 };
 
 #endif // ROSNODE_H

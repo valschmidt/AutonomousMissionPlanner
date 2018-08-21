@@ -8,6 +8,11 @@ namespace Ui
 class ROSDetails;
 }
 
+namespace ros
+{
+    class Time;
+}
+
 class ROSLink;
 
 class ROSDetails : public QWidget
@@ -22,6 +27,8 @@ public:
     
 public slots:
     void heartbeatDelay(double seconds);
+    void rangeAndBearingUpdate(double range, ros::Time const &range_timestamp, double bearing, ros::Time const &bearing_timestamp);
+    void sogUpdate(qreal sog, qreal sog_avg);
 
 private slots:
     void on_activeCheckBox_stateChanged(int state);
@@ -29,6 +36,7 @@ private slots:
     void on_surveyPushButton_clicked(bool checked);
     void on_loiterPushButton_clicked(bool checked);
     void updateVehicleStatus(QString const &status);
+    void on_sendWaypointIndexPushButton_clicked(bool checked);
     
     
 private:

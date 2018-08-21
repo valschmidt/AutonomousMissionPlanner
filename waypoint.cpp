@@ -3,6 +3,7 @@
 #include "autonomousvehicleproject.h"
 #include "backgroundraster.h"
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QDebug>
 
 Waypoint::Waypoint(MissionItem *parent) :GeoGraphicsMissionItem(parent), m_internalPositionChangeFlag(false)
@@ -24,8 +25,7 @@ void Waypoint::setLocation(QGeoCoordinate const &location)
 
 QRectF Waypoint::boundingRect() const
 {
-    qreal penWidth = 1;
-    return QRectF(-10 - penWidth / 2, -10 - penWidth / 2, 20 + penWidth, 20 + penWidth);
+    return shape().boundingRect().marginsAdded(QMarginsF(2,2,2,2));
 }
 
 void Waypoint::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget)
@@ -33,15 +33,32 @@ void Waypoint::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
     painter->save();
 
     QPen p;
-    p.setColor(Qt::red);
+    if(locked())
+        p.setColor(m_lockedColor);
+    else
+        p.setColor(m_unlockedColor);
     p.setCosmetic(true);
     p.setWidth(3);
     painter->setPen(p);
-
-    painter->drawRoundedRect(-10,-10,20,20,8,8);
+    
+    painter->drawPath(shape());
 
     painter->restore();
 }
+
+QPainterPath Waypoint::shape() const
+{
+    QPainterPath ret;
+    qreal scale = 1.0;
+    auto bgr = autonomousVehicleProject()->getBackgroundRaster();
+    if(bgr)
+        scale = 1.0/bgr->mapScale();// scaledPixelSize();
+    //qDebug() << "scale: " << scale;
+    scale = std::max(0.05,scale);
+    ret.addRoundedRect(-10*scale,-10*scale,20*scale,20*scale,8*scale,8*scale);
+    return ret;
+}
+
 
 void Waypoint::updateLocation()
 {
@@ -77,6 +94,32 @@ void Waypoint::write(QJsonObject &json) const
     json["latitude"] = m_location.latitude();
     json["longitude"] = m_location.longitude();
 }
+
+void Waypoint::writeToMissionPlan(QJsonArray& navArray) const
+{
+    QJsonObject waypointObject;
+    writeBehaviorsToMissionPlanObject(waypointObject);
+
+    QJsonObject navObject;
+
+    QJsonObject orientationObject;
+    orientationObject["heading"] = QJsonValue::Null;
+    orientationObject["pitch"] = QJsonValue::Null;
+    orientationObject["roll"] = QJsonValue::Null;
+    navObject["orientation"] = orientationObject;
+
+    QJsonObject positionObject;
+    positionObject["altitude"] = m_location.altitude();
+    positionObject["latitude"] = m_location.latitude();
+    positionObject["longitude"] = m_location.longitude();
+    navObject["position"] = positionObject;
+    
+    waypointObject["nav"] = navObject;
+    QJsonObject navItem;
+    navItem["waypoint"] = waypointObject;
+    navArray.append(navItem);
+}
+
 
 void Waypoint::read(const QJsonObject &json)
 {

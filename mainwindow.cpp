@@ -10,6 +10,7 @@
 #include "roslink.h"
 #include <modeltest.h>
 #include "backgroundraster.h"
+#include "trackline.h"
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -36,7 +37,7 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(project->rosLink(), &ROSLink::rosConnected,this,&MainWindow::onROSConnected);
     ui->rosDetails->setROSLink(project->rosLink());
 
-    connect(ui->projectView,&ProjectView::scaleChanged,project->rosLink(),&ROSLink::updateMapScale);
+    connect(ui->projectView,&ProjectView::scaleChanged,project,&AutonomousVehicleProject::updateMapScale);
 
     project->rosLink()->connectROS();
 }
@@ -84,8 +85,12 @@ void MainWindow::on_treeView_customContextMenuRequested(const QPoint &pos)
 
     QMenu menu(this);
 
-    QAction *exportAction = menu.addAction("Export");
-    connect(exportAction, &QAction::triggered, this, &MainWindow::exportHypack);
+    QAction *exportHypackAction = menu.addAction("Export Hypack");
+    connect(exportHypackAction, &QAction::triggered, this, &MainWindow::exportHypack);
+
+    QAction *exportMPAction = menu.addAction("Export Mission Plan");
+    connect(exportMPAction, &QAction::triggered, this, &MainWindow::exportMissionPlan);
+
     
 #ifdef AMP_ROS
     QAction *sendToROSAction = menu.addAction("Send to ROS");
@@ -114,6 +119,30 @@ void MainWindow::on_treeView_customContextMenuRequested(const QPoint &pos)
     {
         QAction *deleteItemAction = menu.addAction("Delete");
         connect(deleteItemAction, &QAction::triggered, [=](){this->project->deleteItems(ui->treeView->selectionModel()->selectedRows());});
+        
+        MissionItem  *mi = project->itemFromIndex(index);
+        
+        TrackLine *tl = qobject_cast<TrackLine*>(mi);
+        if(tl)
+        {
+            QAction *reverseDirectionAction = menu.addAction("Reverse Direction");
+            connect(reverseDirectionAction, &QAction::triggered, tl, &TrackLine::reverseDirection);
+        }
+        
+        GeoGraphicsMissionItem *gmi = qobject_cast<GeoGraphicsMissionItem*>(mi);
+        if(gmi)
+        {
+            if(gmi->locked())
+            {
+                QAction *unlockItemAction = menu.addAction("Unlock");
+                connect(unlockItemAction, &QAction::triggered, gmi, &GeoGraphicsMissionItem::unlock);
+            }
+            else
+            {
+                QAction *lockItemAction = menu.addAction("Lock");
+                connect(lockItemAction, &QAction::triggered, gmi, &GeoGraphicsMissionItem::lock);
+            }
+        }
     }
 
     menu.exec(ui->treeView->mapToGlobal(pos));
@@ -122,6 +151,11 @@ void MainWindow::on_treeView_customContextMenuRequested(const QPoint &pos)
 void MainWindow::exportHypack() const
 {
     project->exportHypack(ui->treeView->selectionModel()->currentIndex());
+}
+
+void MainWindow::exportMissionPlan() const
+{
+    project->exportMissionPlan(ui->treeView->selectionModel()->currentIndex());
 }
 
 void MainWindow::sendToROS() const
@@ -167,6 +201,11 @@ void MainWindow::on_actionSurveyArea_triggered()
 void MainWindow::on_actionPlatform_triggered()
 {
     project->createPlatform();
+}
+
+void MainWindow::on_actionBehavior_triggered()
+{
+    project->createBehavior();
 }
 
 void MainWindow::on_actionOpenGeometry_triggered()

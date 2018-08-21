@@ -16,7 +16,7 @@ ROSAISContact::ROSAISContact(QObject* parent): QObject(parent), mmsi(0), heading
 }
 
 
-ROSLink::ROSLink(AutonomousVehicleProject* parent): QObject(parent), GeoGraphicsItem(),m_node(nullptr), m_spinner(nullptr),m_have_local_reference(false),m_heading(0.0),m_posmv_heading(0.0),m_base_heading(0.0), m_active(false),m_helmMode("standby"),m_view_point_active(false),m_view_seglist_active(false),m_view_polygon_active(false),m_map_scale(1.0)
+ROSLink::ROSLink(AutonomousVehicleProject* parent): QObject(parent), GeoGraphicsItem(),m_node(nullptr), m_spinner(nullptr),m_have_local_reference(false),m_heading(0.0),m_posmv_heading(0.0),m_base_heading(0.0), m_active(false),m_helmMode("standby"),m_view_point_active(false),m_view_seglist_active(false),m_view_polygon_active(false),m_range(0.0),m_bearing(0.0)
 {
     setAcceptHoverEvents(false);
     setOpacity(1.0);
@@ -47,13 +47,17 @@ void ROSLink::connectROS()
             m_origin_subscriber = m_node->subscribe("/udp/origin", 10, &ROSLink::originCallback, this);
             m_heading_subscriber = m_node->subscribe("/udp/heading", 10, &ROSLink::headingCallback, this);
             m_base_heading_subscriber = m_node->subscribe("/base/orientation", 10, &ROSLink::baseHeadingCallback, this);
-            m_ais_subscriber = m_node->subscribe("/udp/ais", 10, &ROSLink::aisCallback, this);
+            m_ais_subscriber = m_node->subscribe("/udp/contact", 10, &ROSLink::contactCallback, this);
             m_heartbeat_subscriber = m_node->subscribe("/udp/heartbeat", 10, &ROSLink::heartbeatCallback, this);
             m_view_point_subscriber = m_node->subscribe("/udp/view_point", 10, &ROSLink::viewPointCallback, this);
             m_view_polygon_subscriber = m_node->subscribe("/udp/view_polygon", 10, &ROSLink::viewPolygonCallback, this);
             m_view_seglist_subscriber = m_node->subscribe("/udp/view_seglist", 10, &ROSLink::viewSeglistCallback, this);
             m_posmv_position = m_node->subscribe("/udp/posmv/position", 10, &ROSLink::posmvPositionCallback, this);
             m_posmv_orientation = m_node->subscribe("/udp/posmv/orientation", 10, &ROSLink::posmvOrientationCallback, this);
+            m_range_subscriber = m_node->subscribe("/range", 10, &ROSLink::rangeCallback, this);
+            m_bearing_subscriber = m_node->subscribe("/bearing",10, &ROSLink::bearingCallback, this);
+            m_sog_subscriber = m_node->subscribe("/udp/sog",10, &ROSLink::sogCallback, this);
+            
             m_active_publisher = m_node->advertise<std_msgs::Bool>("/udp/active",1);
             m_helmMode_publisher = m_node->advertise<std_msgs::String>("/udp/helm_mode",1);
             m_wpt_updates_publisher = m_node->advertise<std_msgs::String>("/udp/wpt_updates",1);
@@ -146,6 +150,7 @@ QPainterPath ROSLink::shape() const
 
 QPainterPath ROSLink::vehicleShape() const
 {
+    auto bgr = autonomousVehicleProject()->getBackgroundRaster();
     QPainterPath ret;
     if (m_local_location_history.size() > 1)
     {
@@ -159,11 +164,14 @@ QPainterPath ROSLink::vehicleShape() const
         }
         auto last = *(m_local_location_history.rbegin());
         
-        if(m_pixel_size > .5)
-            drawTriangle(ret,m_location,m_heading,m_pixel_size);
-        else
-            drawShipOutline(ret,m_location,m_heading,3,.8,.8,1);
-
+        if(bgr)
+        {
+            qreal pixel_size = bgr->scaledPixelSize();
+            if(pixel_size > .5)
+                drawTriangle(ret,m_location,m_heading,pixel_size);
+            else
+                drawShipOutline(ret,m_location,m_heading,3,.8,.8,1);
+        }
         
         //ret.addRect(-1,-5,2,10);
         //ret.addRect(-5,-1,10,2);
@@ -186,10 +194,15 @@ QPainterPath ROSLink::vehicleShapePosmv() const
         }
         auto last = *(m_local_posmv_location_history.rbegin());
         
-        if(m_pixel_size > .5)
-            drawTriangle(ret,m_posmv_location,m_heading,m_pixel_size);
-        else
-            drawShipOutline(ret,m_posmv_location,m_posmv_heading,2,.8,.8,2);
+        auto bgr = autonomousVehicleProject()->getBackgroundRaster();
+        if(bgr)
+        {
+            qreal pixel_size = bgr->scaledPixelSize();
+            if(pixel_size > .5)
+                drawTriangle(ret,m_posmv_location,m_posmv_heading,pixel_size);
+            else
+                drawShipOutline(ret,m_posmv_location,m_posmv_heading,2,.8,.8,2);
+        }
     }
     return ret;
 }
@@ -210,11 +223,16 @@ QPainterPath ROSLink::baseShape() const
         }
         auto last = *(m_local_base_location_history.rbegin());
         
-        if(m_pixel_size > 1)
-            drawTriangle(ret,m_base_location,m_base_heading,m_pixel_size);
-        else
-            // fairweather estimates: 70m by 12.70m
-            drawShipOutline(ret,m_base_location,m_base_heading,20,6.35,6.35,49);
+        auto bgr = autonomousVehicleProject()->getBackgroundRaster();
+        if(bgr)
+        {
+            qreal pixel_size = bgr->scaledPixelSize();
+            if(pixel_size > 1)
+                drawTriangle(ret,m_base_location,m_base_heading,pixel_size);
+            else
+                // fairweather estimates: 70m by 12.70m
+                drawShipOutline(ret,m_base_location,m_base_heading,20,6.35,6.35,49);
+        }
 
     }
     return ret;
@@ -226,32 +244,47 @@ QPainterPath ROSLink::aisShape() const
     QPainterPath ret;
     for(auto contactList: m_contacts)
     {
-        auto p = contactList.second.begin();
-        ret.moveTo((*p)->location_local);
-        p++;
-        while(p != contactList.second.end())
+        if((ros::Time::now() - contactList.second.back()->timestamp) < ros::Duration(300))
         {
-            ret.lineTo((*p)->location_local);
+            auto p = contactList.second.begin();
+            ret.moveTo((*p)->location_local);
             p++;
-        }
-        auto last = *(contactList.second.rbegin());
+            while(p != contactList.second.end())
+            {
+                ret.lineTo((*p)->location_local);
+                p++;
+            }
+            auto last = *(contactList.second.rbegin());
 
-        if(m_pixel_size > 1)
-            drawTriangle(ret,last->location,last->heading,m_pixel_size);
-        else
-            drawShipOutline(ret,last->location,last->heading,last->dimension_to_bow,last->dimension_to_port,last->dimension_to_stbd,last->dimension_to_stern);
+            auto bgr = autonomousVehicleProject()->getBackgroundRaster();
+            if(bgr)
+            {
+                qreal pixel_size = bgr->scaledPixelSize();
+                if(pixel_size > 1)
+                    drawTriangle(ret,last->location,last->heading,pixel_size);
+                else
+                    drawShipOutline(ret,last->location,last->heading,last->dimension_to_bow,last->dimension_to_port,last->dimension_to_stbd,last->dimension_to_stern);
+            }
+        }
     }
         
     return ret;
 }
 
 QPainterPath ROSLink::viewShape() const
-
 {
     QPainterPath ret;
     
     if(m_view_point_active)
-        ret.addEllipse(m_local_view_point,4*m_pixel_size,4*m_pixel_size);
+    {
+        qreal scale = 1.0;
+        auto bgr = autonomousVehicleProject()->getBackgroundRaster();
+        if(bgr)
+            scale = 1.0/bgr->mapScale();
+        scale = std::max(0.05,scale);
+        //drawOctagon(ret,m_view_point,autonomousVehicleProject()->getBackgroundRaster()->scaledPixelSize());
+        ret.addEllipse(m_local_view_point,10*scale,10*scale);
+    }
     
     if(m_view_seglist_active && !m_local_view_seglist.empty())
     {
@@ -351,13 +384,44 @@ void ROSLink::posmvPositionCallback(const sensor_msgs::NavSatFix::ConstPtr& mess
     QMetaObject::invokeMethod(this,"updatePosmvLocation", Qt::QueuedConnection, Q_ARG(QGeoCoordinate, position));
 }
 
+void ROSLink::rangeCallback(const std_msgs::Float32::ConstPtr& message)
+{
+    m_range_timestamp = ros::Time::now();
+    m_range = message->data;
+}
+
+void ROSLink::bearingCallback(const std_msgs::Float32::ConstPtr& message)
+{
+    m_bearing_timestamp = ros::Time::now();
+    m_bearing = message->data;
+}
+
+void ROSLink::sogCallback(const geometry_msgs::TwistStamped::ConstPtr& message)
+{
+    QMetaObject::invokeMethod(this,"updateSog", Qt::QueuedConnection, Q_ARG(qreal, message->twist.linear.x));  
+}
+
+void ROSLink::updateSog(qreal sog)
+{
+    // 1852m per NM
+    m_sog = sog*1.9438;
+    m_sog_history.append(m_sog);
+    if(m_sog_history.length() > 20)
+        m_sog_history.pop_front();
+    qreal sog_sum = 0;
+    for(auto s: m_sog_history)
+        sog_sum += s;
+    m_sog_avg = sog_sum/m_sog_history.length();
+    //qDebug() << m_sog << " knts, " << m_sog_avg << " knts avg";
+    m_details->sogUpdate(m_sog,m_sog_avg);
+}
+
 
 void ROSLink::baseNavSatFixCallback(const sensor_msgs::NavSatFix::ConstPtr& message)
 {
     QGeoCoordinate position(message->latitude, message->longitude, message->altitude);
     QMetaObject::invokeMethod(this,"updateBaseLocation", Qt::QueuedConnection, Q_ARG(QGeoCoordinate, position));
 }
-
 
 void ROSLink::originCallback(const geographic_msgs::GeoPoint::ConstPtr& message)
 {
@@ -384,10 +448,14 @@ void ROSLink::baseHeadingCallback(const marine_msgs::NavEulerStamped::ConstPtr& 
 }
 
 
-void ROSLink::aisCallback(const asv_msgs::AISContact::ConstPtr& message)
+void ROSLink::contactCallback(const marine_msgs::Contact::ConstPtr& message)
 {
     qDebug() << message->mmsi << ": " << message->name.c_str() << " heading: " << message->heading << " cog: " << message->cog << " dimensions: port: " << message->dimension_to_port << " strbd: " << message->dimension_to_stbd << " bow " << message->dimension_to_bow << " stern: " << message->dimension_to_stern;
+    qDebug() << "\t\t" << message->position.latitude << ", " << message->position.longitude;
+    if(message->position.latitude > 90 || message->position.longitude > 180)
+        return;
     ROSAISContact *c = new ROSAISContact();
+    c->timestamp = message->header.stamp;
     c->mmsi = message->mmsi;
     c->name = message->name;
     c->location.setLatitude(message->position.latitude);
@@ -437,6 +505,7 @@ void ROSLink::watchdogUpdate()
         //std::cerr << "timestamp: " << m_last_heartbeat_timestamp << "\tnow: " << now << "\tdiff:" << diff << std::endl;
 
         m_details->heartbeatDelay(diff.toSec());
+        m_details->rangeAndBearingUpdate(m_range,m_range_timestamp,m_bearing,m_bearing_timestamp);
     }
     else
         m_details->heartbeatDelay(1000.0);
@@ -516,6 +585,17 @@ void ROSLink::sendGoto(const QGeoCoordinate& gotoLocation)
     QList<QGeoCoordinate> wps;
     wps.append(gotoLocation);
     sendWaypoints(wps);
+}
+
+void ROSLink::sendWaypointIndexUpdate(int waypoint_index)
+{
+    std::stringstream updates;
+    updates << "currix=" << waypoint_index;
+    
+    std_msgs::String rosUpdates;
+    rosUpdates.data = updates.str();
+    if(m_node)
+        m_wpt_updates_publisher.publish(rosUpdates);
 }
 
 
@@ -606,14 +686,15 @@ void ROSLink::addAISContact(ROSAISContact *c)
         c->location_local = geoToPixel(c->location,autonomousVehicleProject())-m_local_reference_position;
     }
     m_contacts[c->mmsi].push_back(c);
-    while(m_contacts[c->mmsi].size() > 50)
+    while(!m_contacts[c->mmsi].empty() && (ros::Time::now() - m_contacts[c->mmsi].front()->timestamp) > ros::Duration(600))
         m_contacts[c->mmsi].pop_front();
+//     while(m_contacts[c->mmsi].size() > 50)
+//         m_contacts[c->mmsi].pop_front();
     update();
 }
 
 void ROSLink::updateBackground(BackgroundRaster *bgr)
 {
-    m_pixel_size = m_map_scale/bgr->pixelSize();
     setParentItem(bgr);
     recalculatePositions();
 }
@@ -737,34 +818,60 @@ void ROSLink::viewPointCallback(const std_msgs::String::ConstPtr& message)
     //qDebug() << "view point" << std::string(message->data).c_str();
     auto parsed = parseViewString(QString(std::string(message->data).c_str()));
     //qDebug() << parsed;
+    bool view_point_active;
     if(parsed.contains("active"))
-        m_view_point_active = (parsed["active"] == "true");
+        view_point_active = (parsed["active"] == "true");
     else
-        m_view_point_active = true;
-    m_view_point = rosMapToGeo(QPointF(parsed["x"].toFloat(),parsed["y"].toFloat()));
+        view_point_active = true;
+    QGeoCoordinate view_point = rosMapToGeo(QPointF(parsed["x"].toFloat(),parsed["y"].toFloat()));
     //qDebug() << m_view_point;
-    m_local_view_point = geoToPixel(m_view_point,autonomousVehicleProject())-m_local_reference_position;
+    QPointF local_view_point = geoToPixel(m_view_point,autonomousVehicleProject())-m_local_reference_position;
     //qDebug() << m_local_view_point;
+    QMetaObject::invokeMethod(this,"updateViewPoint", Qt::QueuedConnection, Q_ARG(QGeoCoordinate, view_point), Q_ARG(QPointF, local_view_point), Q_ARG(bool, view_point_active));
 }
+
+void ROSLink::updateViewPoint(QGeoCoordinate view_point, QPointF local_view_point, bool view_point_active)
+{
+    prepareGeometryChange();
+    m_view_point = view_point;
+    m_local_view_point = local_view_point;
+    m_view_point_active = view_point_active;
+    update();
+}
+
 
 void ROSLink::viewPolygonCallback(const std_msgs::String::ConstPtr& message)
 {
-    qDebug() << "view polygon" << std::string(message->data).c_str();
+    //qDebug() << "view polygon" << std::string(message->data).c_str();
     auto parsed = parseViewString(QString(std::string(message->data).c_str()));
-    qDebug() << parsed;
+    //qDebug() << parsed;
+    bool view_polygon_active;
     if(parsed.contains("active"))
-        m_view_polygon_active = (parsed["active"] == "true");
+        view_polygon_active = (parsed["active"] == "true");
     else
-        m_view_polygon_active = true;
+        view_polygon_active = true;
     auto points = parseViewPointList(parsed["pts"]);
     //qDebug() << points;
-    m_view_polygon.clear();
-    m_local_view_polygon.clear();
+    //m_view_polygon.clear();
+    QList<QGeoCoordinate> view_polygon;
+    //m_local_view_polygon.clear();
+    QList<QPointF> local_view_polygon;
     for(auto p: points)
     {
-        m_view_polygon.append(rosMapToGeo(p));
-        m_local_view_polygon.append(geoToPixel(m_view_polygon.back(),autonomousVehicleProject())-m_local_reference_position);
+        view_polygon.append(rosMapToGeo(p));
+        local_view_polygon.append(geoToPixel(view_polygon.back(),autonomousVehicleProject())-m_local_reference_position);
     }
+    QMetaObject::invokeMethod(this,"updateViewPolygon", Qt::QueuedConnection, Q_ARG(QList<QGeoCoordinate>, view_polygon), Q_ARG(QList<QPointF>, local_view_polygon), Q_ARG(bool, view_polygon_active));
+
+}
+
+void ROSLink::updateViewPolygon(QList<QGeoCoordinate> view_polygon, QList<QPointF> local_view_polygon, bool view_polygon_active)
+{
+    prepareGeometryChange();
+    m_view_polygon = view_polygon;
+    m_local_view_polygon = local_view_polygon;
+    m_view_polygon_active = view_polygon_active;
+    update();
 }
 
 void ROSLink::viewSeglistCallback(const std_msgs::String::ConstPtr& message)
@@ -772,26 +879,31 @@ void ROSLink::viewSeglistCallback(const std_msgs::String::ConstPtr& message)
     //qDebug() << "view seglist" << std::string(message->data).c_str();
     auto parsed = parseViewString(QString(std::string(message->data).c_str()));
     //qDebug() << parsed;
+    bool view_seglist_active;
     if(parsed.contains("active"))
-        m_view_seglist_active = (parsed["active"] == "true");
+        view_seglist_active = (parsed["active"] == "true");
     else
-        m_view_seglist_active = true;
+        view_seglist_active = true;
     auto points = parseViewPointList(parsed["pts"]);
     //qDebug() << points;
-    m_view_seglist.clear();
-    m_local_view_seglist.clear();
+    //m_view_seglist.clear();
+    //m_local_view_seglist.clear();
+    QList<QGeoCoordinate> view_seglist;
+    QList<QPointF> local_view_seglist;
     for(auto p: points)
     {
-        m_view_seglist.append(rosMapToGeo(p));
-        m_local_view_seglist.append(geoToPixel(m_view_seglist.back(),autonomousVehicleProject())-m_local_reference_position);
+        view_seglist.append(rosMapToGeo(p));
+        local_view_seglist.append(geoToPixel(view_seglist.back(),autonomousVehicleProject())-m_local_reference_position);
     }
+    QMetaObject::invokeMethod(this,"updateViewSeglist", Qt::QueuedConnection, Q_ARG(QList<QGeoCoordinate>, view_seglist), Q_ARG(QList<QPointF>, local_view_seglist), Q_ARG(bool, view_seglist_active));
 }
 
-void ROSLink::updateMapScale(qreal scale)
+void ROSLink::updateViewSeglist(QList<QGeoCoordinate> view_seglist, QList<QPointF> local_view_seglist, bool view_seglist_active)
 {
-    m_map_scale = scale;
-    qDebug() << "scale: " << m_map_scale;
-    m_pixel_size = autonomousVehicleProject()->getBackgroundRaster()->pixelSize()/m_map_scale;
-    qDebug() << "scaled pixel size: " << m_pixel_size;
+    prepareGeometryChange();
+    m_view_seglist = view_seglist;
+    m_local_view_seglist = local_view_seglist;
+    m_view_seglist_active = view_seglist_active;
+    update();
 }
 

@@ -23,7 +23,7 @@ class QSvgRenderer;
 #ifdef AMP_ROS
 class ROSLink;
 #endif
-
+class Behavior;
 
 class AutonomousVehicleProject : public QAbstractItemModel
 {
@@ -50,6 +50,8 @@ public:
 
     Platform * createPlatform();
     Platform * currentPlatform() const;
+    
+    Behavior * createBehavior();
     
     Group * addGroup();
     
@@ -87,6 +89,8 @@ public:
     
     ROSLink * rosLink() const;
 
+    QJsonDocument generateMissionPlan(QModelIndex const &index);
+    
 signals:
     void currentPlaformUpdated();
     void backgroundUpdated(BackgroundRaster *bg);
@@ -94,10 +98,12 @@ signals:
 public slots:
 
     void exportHypack(QModelIndex const &index);
+    void exportMissionPlan(QModelIndex const &index);
     void sendToROS(QModelIndex const &index);
     void deleteItems(QModelIndexList const &indices);
     void deleteItem(QModelIndex const &index);
     void deleteItem(MissionItem *item);
+    void updateMapScale(qreal scale);
 
 
 private:
@@ -132,6 +138,8 @@ public:
 
 private:    
     friend class RowInserter;
+    
+    qreal m_map_scale;
 };
 
 

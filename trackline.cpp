@@ -6,6 +6,8 @@
 #include <QStandardItem>
 #include <QDebug>
 #include "autonomousvehicleproject.h"
+#include <QVector2D>
+#include "backgroundraster.h"
 
 TrackLine::TrackLine(MissionItem *parent) :GeoGraphicsMissionItem(parent)
 {
@@ -25,20 +27,14 @@ void TrackLine::paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
         painter->save();
 
         QPen p;
-        p.setColor(Qt::red);
+        if(locked())
+            p.setColor(m_lockedColor);
+        else
+            p.setColor(m_unlockedColor);
         p.setCosmetic(true);
         p.setWidth(3);
         painter->setPen(p);
-
-        auto first = children.begin();
-        auto second = first;
-        second++;
-        while(second != children.end())
-        {
-            painter->drawLine((*first)->pos(),(*second)->pos());
-            first++;
-            second++;
-        }
+        painter->drawPath(shape());
 
         painter->restore();
 
@@ -53,19 +49,42 @@ QPainterPath TrackLine::shape() const
     {
         auto i = children.begin();
         QPainterPath ret((*i)->pos());
+        auto last = i;
         i++;
         while(i != children.end())
         {
             ret.lineTo((*i)->pos());
+            drawArrow(ret,(*last)->pos(),(*i)->pos());
+            last = i;
             i++;
         }
-        QPainterPathStroker pps;
-        pps.setWidth(5);
-        return pps.createStroke(ret);
-
+        return ret;
     }
     return QGraphicsItem::shape();
 }
+
+void TrackLine::drawArrow(QPainterPath& path, const QPointF& from, const QPointF& to) const
+{
+    qreal scale = 1.0;
+    auto bgr = autonomousVehicleProject()->getBackgroundRaster();
+    if(bgr)
+        scale = 1.0/bgr->mapScale();// scaledPixelSize();
+    //qDebug() << "scale: " << scale;
+    scale = std::max(0.05,scale);
+    
+    path.moveTo(to);
+    QVector2D v(to-from);
+    v.normalize();
+    QVector2D left(-v.y(),v.x());
+    QVector2D right(v.y(),-v.x());
+    QVector2D back = -v;
+    path.lineTo(to+(left+back*2).toPointF()*10*scale);
+    path.moveTo(to);
+    path.lineTo(to+(right+back*2).toPointF()*10*scale);
+    path.moveTo(to);
+    
+}
+
 
 Waypoint * TrackLine::createWaypoint()
 {
@@ -76,6 +95,7 @@ Waypoint * TrackLine::createWaypoint()
     wp->setFlag(QGraphicsItem::ItemIsMovable);
     wp->setFlag(QGraphicsItem::ItemIsSelectable);
     wp->setFlag(QGraphicsItem::ItemSendsGeometryChanges);
+    wp->setFlag(QGraphicsItem::ItemSendsScenePositionChanges);
     return wp;
 }
 
@@ -135,6 +155,26 @@ void TrackLine::write(QJsonObject &json) const
     json["waypoints"] = wpArray;
 }
 
+void TrackLine::writeToMissionPlan(QJsonArray& navArray) const
+{
+    QJsonObject navItem;
+    QJsonObject pathObject;
+    writeBehaviorsToMissionPlanObject(pathObject);
+    QJsonArray pathNavArray;
+    auto children = childItems();
+    for(auto child: children)
+    {
+        if(child->type() == GeoGraphicsItem::WaypointType)
+        {
+            Waypoint *wp = qgraphicsitem_cast<Waypoint*>(child);
+            wp->writeToMissionPlan(pathNavArray);
+        }
+    }
+    pathObject["nav"] = pathNavArray;
+    navItem["path"] = pathObject;
+    navArray.append(navItem);
+}
+
 void TrackLine::read(const QJsonObject &json)
 {
     QJsonArray waypointsArray = json["waypoints"].toArray();
@@ -157,6 +197,21 @@ void TrackLine::updateProjectedPoints()
     for(auto wp: waypoints())
         wp->updateProjectedPoints();
 }
+
+void TrackLine::reverseDirection()
+{
+    prepareGeometryChange();
+    QList<QGeoCoordinate> points;
+    for(auto wp: waypoints())
+        points.push_back(wp->location());
+    for(auto wp: waypoints())
+    {
+        wp->setLocation(points.back());
+        points.pop_back();
+    }
+    update();
+}
+
 
 bool TrackLine::canAcceptChildType(const std::string& childType) const
 {

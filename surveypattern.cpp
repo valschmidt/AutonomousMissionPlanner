@@ -3,6 +3,7 @@
 #include <QPainter>
 #include <QtMath>
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QDebug>
 #include "platform.h"
 #include "autonomousvehicleproject.h"
@@ -33,6 +34,7 @@ void SurveyPattern::setStartLocation(const QGeoCoordinate &location)
         m_startLocation->setObjectName("start");
     }
     m_startLocation->setLocation(location);
+    setPos(m_startLocation->geoToPixel(location,autonomousVehicleProject()));
     m_startLocation->setPos(m_startLocation->geoToPixel(location,autonomousVehicleProject()));
     update();
 }
@@ -72,6 +74,7 @@ void SurveyPattern::calculateFromWaypoints()
         qreal ab_angle = m_startLocation->location().azimuthTo(m_endLocation->location());
 
         qreal ac_distance = 1.0;
+        m_spacing = ab_distance/10.0;
         qreal ac_angle = 90.0;
         if(m_spacingLocation)
         {
@@ -116,6 +119,33 @@ void SurveyPattern::write(QJsonObject &json) const
     }
     json["spacing"] = m_spacing;
     json["direction"] = m_direction;
+}
+
+void SurveyPattern::writeToMissionPlan(QJsonArray& navArray) const
+{
+    auto lines = getLines();
+    for(int i = 0; i < lines.size(); i++)
+    {
+        auto l = lines[i];
+        QJsonObject navItem;
+        QJsonObject pathObject;
+        writeBehaviorsToMissionPlanObject(pathObject);
+        QJsonArray pathNavArray;
+        for(auto wp: l)
+        {
+            Waypoint * temp_wp = new Waypoint();
+            temp_wp->setLocation(wp);
+            temp_wp->writeToMissionPlan(pathNavArray);
+            delete temp_wp;
+        }
+        pathObject["nav"] = pathNavArray;
+        if(m_arcCount>0 && i%2 == 1)
+            pathObject["type"] = "turn";
+        else
+            pathObject["type"] = "survey_line";
+        navItem["path"] = pathObject;
+        navArray.append(navItem);
+    }    
 }
 
 void SurveyPattern::read(const QJsonObject &json)
@@ -206,7 +236,7 @@ void SurveyPattern::updateEndLocation()
 
 QRectF SurveyPattern::boundingRect() const
 {
-    return shape().boundingRect();
+    return shape().boundingRect().marginsAdded(QMarginsF(5,5,5,5));
 }
 
 void SurveyPattern::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget)
@@ -217,7 +247,10 @@ void SurveyPattern::paint(QPainter *painter, const QStyleOptionGraphicsItem *opt
         painter->save();
 
         QPen p;
-        p.setColor(Qt::red);
+        if(locked())
+            p.setColor(m_lockedColor);
+        else
+            p.setColor(m_unlockedColor);
         p.setCosmetic(true);
         p.setWidth(3);
         painter->setPen(p);
@@ -234,7 +267,10 @@ void SurveyPattern::paint(QPainter *painter, const QStyleOptionGraphicsItem *opt
                 painter->setPen(p);
                 painter->drawPoint(m_startLocation->geoToPixel(*first,autonomousVehicleProject()));
                 p.setWidth(3);
-                p.setColor(Qt::red);
+                if(locked())
+                    p.setColor(m_lockedColor);
+                else
+                    p.setColor(m_unlockedColor);
                 painter->setPen(p);
                 painter->drawLine(m_startLocation->geoToPixel(*first,autonomousVehicleProject()),m_startLocation->geoToPixel(*second,autonomousVehicleProject()));
                 first++;
@@ -271,7 +307,7 @@ void SurveyPattern::updateLabel()
         }
 
     double distanceInNMs = cumulativeDistance*0.000539957;
-    QString label = "Distance: "+QString::number(cumulativeDistance)+" (m), "+QString::number(distanceInNMs)+" (nm)";
+    QString label = "Distance: "+QString::number(int(cumulativeDistance))+" (m), "+QString::number(distanceInNMs,'f',1)+" (nm)";
 
     AutonomousVehicleProject* avp = autonomousVehicleProject();
     if(avp)
@@ -280,7 +316,10 @@ void SurveyPattern::updateLabel()
         if(platform)
         {
             double time = distanceInNMs/platform->speed();
-            label += " ETE: "+QString::number(time)+" (h)";
+            if(time < 1.0)
+                label += "\nETE: "+QString::number(int(time*60))+" (min)";
+            else
+                label += "\nETE: "+QString::number(time,'f',2)+" (h)";
         }
     }
 
@@ -394,6 +433,8 @@ QList<QList<QGeoCoordinate> > SurveyPattern::getLines() const
                 ac_distance = m_startLocation->location().distanceTo(m_spacingLocation->location());
                 ac_angle = m_startLocation->location().azimuthTo(m_spacingLocation->location());
             }
+            else
+                ac_distance = ab_distance/10.0;
             qreal leg_heading = ac_angle-90.0;
             qreal leg_length = ab_distance*qCos(qDegreesToRadians(ab_angle-leg_heading));
             //qDebug() << "getPath: leg_length: " << leg_length << " leg_heading: " << leg_heading;

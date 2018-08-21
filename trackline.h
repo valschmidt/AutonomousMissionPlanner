@@ -14,9 +14,11 @@ class TrackLine : public GeoGraphicsMissionItem
 public:
     explicit TrackLine(MissionItem *parent = 0);
 
-    QRectF boundingRect() const;
-    void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget);
-    QPainterPath shape() const;
+    QRectF boundingRect() const override;
+    void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget) override;
+    QPainterPath shape() const override;
+    
+    void drawArrow(QPainterPath &path, QPointF const &from, QPointF const &to) const;
 
     Waypoint * createWaypoint();
     Waypoint * addWaypoint(QGeoCoordinate const &location);
@@ -24,8 +26,9 @@ public:
 
     QList<Waypoint *> waypoints() const;
 
-    void write(QJsonObject &json) const;
-    void read(const QJsonObject &json);
+    void write(QJsonObject &json) const override;
+    void writeToMissionPlan(QJsonArray & navArray) const override;
+    void read(const QJsonObject &json) override;
     
     int type() const override {return TrackLineType;}
     
@@ -38,6 +41,7 @@ signals:
 
 public slots:
     void updateProjectedPoints();
+    void reverseDirection();
 
 private:
 };

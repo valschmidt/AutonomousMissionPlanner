@@ -116,6 +116,11 @@ void BackgroundRaster::write(QJsonObject &json) const
     json["filename"] = m_filename;
 }
 
+void BackgroundRaster::writeToMissionPlan(QJsonArray& navArray) const
+{
+}
+
+
 void BackgroundRaster::read(const QJsonObject &json)
 {
 
@@ -126,3 +131,22 @@ qreal BackgroundRaster::pixelSize() const
     return m_pixel_size;
 }
 
+qreal BackgroundRaster::scaledPixelSize() const
+{
+    return m_pixel_size/m_map_scale;
+}
+
+void BackgroundRaster::updateMapScale(qreal scale)
+{
+    m_map_scale = scale;
+}
+
+qreal BackgroundRaster::mapScale() const
+{
+    return m_map_scale;
+}
+
+bool BackgroundRaster::canAcceptChildType(const std::string& childType) const
+{
+    return false;
+}

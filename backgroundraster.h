@@ -19,16 +19,25 @@ public:
     QPixmap topLevelPixmap() const;
     QString const &filename() const;
 
-    void write(QJsonObject &json) const;
+    void write(QJsonObject &json) const override;
+    void writeToMissionPlan(QJsonArray & navArray) const override;
     void read(const QJsonObject &json);
     
     qreal pixelSize() const;
+    qreal scaledPixelSize() const;
+    qreal mapScale() const;
     
+    bool canAcceptChildType(const std::string & childType) const override;
+
+public slots:
+    void updateMapScale(qreal scale); 
+
 private:
     typedef std::map<int,QPixmap> Mipmaps;
     Mipmaps backgroundImages;
     QString m_filename;
     qreal m_pixel_size; // size of a pixel in meters.
+    qreal m_map_scale;
 
 };
 

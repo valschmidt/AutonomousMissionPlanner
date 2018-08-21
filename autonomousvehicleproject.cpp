@@ -21,6 +21,7 @@
 #include "group.h"
 #include <gdal_priv.h>
 #include "vectordataset.h"
+#include "behavior.h"
 
 #ifdef AMP_ROS
 #include "roslink.h"
@@ -28,7 +29,7 @@
 
 #include <iostream>
 
-AutonomousVehicleProject::AutonomousVehicleProject(QObject *parent) : QAbstractItemModel(parent), m_currentBackground(nullptr), m_currentPlatform(nullptr), m_currentGroup(nullptr), m_currentSelected(nullptr), m_symbols(new QSvgRenderer(QString(":/symbols.svg"),this))
+AutonomousVehicleProject::AutonomousVehicleProject(QObject *parent) : QAbstractItemModel(parent), m_currentBackground(nullptr), m_currentPlatform(nullptr), m_currentGroup(nullptr), m_currentSelected(nullptr), m_symbols(new QSvgRenderer(QString(":/symbols.svg"),this)), m_map_scale(1.0)
 {
     GDALAllRegister();
 
@@ -184,6 +185,13 @@ Platform * AutonomousVehicleProject::createPlatform()
     return p;
 }
 
+Behavior * AutonomousVehicleProject::createBehavior()
+{
+    Behavior *b = potentialParentItemFor("Behavior")->createMissionItem<Behavior>("behavior");
+    return b;
+}
+
+
 Group * AutonomousVehicleProject::addGroup()
 {
     RowInserter ri(*this,m_currentGroup);
@@ -320,6 +328,34 @@ void AutonomousVehicleProject::exportHypack(const QModelIndex &index)
     }
 }
 
+QJsonDocument AutonomousVehicleProject::generateMissionPlan(const QModelIndex& index)
+{
+    MissionItem *item = itemFromIndex(index);
+    QJsonDocument plan;
+    QJsonObject topLevel;
+    QJsonObject defaultParameters;
+    topLevel["DEFAULT_PARAMETERS"] = defaultParameters;
+    QJsonArray navArray;
+    item->writeToMissionPlan(navArray);
+    topLevel["NAVIGATION"] = navArray;
+    plan.setObject(topLevel);
+    return plan;
+}
+
+void AutonomousVehicleProject::exportMissionPlan(const QModelIndex& index)
+{
+    QString fname = QFileDialog::getSaveFileName(qobject_cast<QWidget*>(QObject::parent()));
+    if(fname.length() > 0)
+    {
+        QJsonDocument plan = generateMissionPlan(index);
+        QFile saveFile(fname);
+        if(saveFile.open(QFile::WriteOnly))
+        {
+            saveFile.write(plan.toJson());
+        }
+    }
+}
+
 void AutonomousVehicleProject::sendToROS(const QModelIndex& index)
 {
     MissionItem *mi = itemFromIndex(index);
@@ -335,46 +371,8 @@ void AutonomousVehicleProject::sendToROS(const QModelIndex& index)
         m_ROSLink->sendWaypoints(wps);
     }
 #endif
-    // mission=plan format
-    QJsonDocument plan;
-    QJsonObject topLevel;
-    QJsonArray navArray;
-    
-    for (auto l: lines)
-    {
-        QJsonObject navObject;
-        QJsonObject pathObject;
-        QJsonArray pathNavArray;
-        for (auto w: l)
-        {
-            QJsonObject wpObject;
-            QJsonObject wpNavObject;
-            
-            QJsonObject orientationObject;
-            orientationObject["heading"] = QJsonValue::Null;
-            orientationObject["pitch"] = QJsonValue::Null;
-            orientationObject["roll"] = QJsonValue::Null;
-            wpNavObject["orientation"] = orientationObject;
-
-            QJsonObject positionObject;
-            positionObject["altitude"] = QJsonValue::Null;
-            positionObject["latitude"] = w.latitude();
-            positionObject["longitude"] = w.longitude();
-            wpNavObject["position"] = positionObject;
-            
-            wpObject["nav"] = wpNavObject;
-            QJsonObject navItem;
-            navItem["waypoint"]=wpObject;
-            pathNavArray.append(navItem);
-        }
-        pathObject["nav"] = pathNavArray;
-        navObject["path"] = pathObject;
-        navArray.append(navObject);
-    }
-
-    topLevel["NAVIGATION"] = navArray;
-
-    plan.setObject(topLevel);
+    // mission_plan format
+    QJsonDocument plan = generateMissionPlan(index);
     
 #ifdef AMP_ROS
     if(m_ROSLink)
@@ -383,6 +381,9 @@ void AutonomousVehicleProject::sendToROS(const QModelIndex& index)
     }
 #endif
 
+    GeoGraphicsMissionItem * gmi = qobject_cast<GeoGraphicsMissionItem*>(mi);
+    if(gmi)
+        gmi->lock();
 }
 
 
@@ -456,6 +457,7 @@ void AutonomousVehicleProject::setCurrentBackground(BackgroundRaster *bgr)
     m_currentBackground = bgr;
     if(bgr)
     {
+        bgr->updateMapScale(m_map_scale);
         m_scene->addItem(bgr);
         emit backgroundUpdated(bgr);
     }
@@ -632,6 +634,13 @@ ROSLink * AutonomousVehicleProject::rosLink() const
     return m_ROSLink;
 }
 
+void AutonomousVehicleProject::updateMapScale(qreal scale)
+{
+    if(m_currentBackground)
+        m_currentBackground->updateMapScale(scale);
+    m_map_scale = scale;
+    
+}
 
 AutonomousVehicleProject::RowInserter::RowInserter(AutonomousVehicleProject& project, MissionItem* parent):m_project(project)
 {
@@ -642,3 +651,4 @@ AutonomousVehicleProject::RowInserter::~RowInserter()
 {
     m_project.endInsertRows();
 }
+

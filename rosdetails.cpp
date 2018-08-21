@@ -54,6 +54,13 @@ void ROSDetails::updateVehicleStatus(const QString& status)
     ui->vehicleStatusTextBrowser->setText(status);
 }
 
+void ROSDetails::on_sendWaypointIndexPushButton_clicked(bool checked)
+{
+    qDebug() << "send current index: " << ui->sendWaypointSpinBox->value();
+    m_rosLink->sendWaypointIndexUpdate(ui->sendWaypointSpinBox->value());
+}
+
+
 void ROSDetails::heartbeatDelay(double seconds)
 {
     QPalette pal = palette();
@@ -65,4 +72,30 @@ void ROSDetails::heartbeatDelay(double seconds)
         pal.setColor(QPalette::Background, Qt::red);
     this->setAutoFillBackground(true);
     this->setPalette(pal);
+}
+
+void ROSDetails::rangeAndBearingUpdate(double range, ros::Time const & range_timestamp, double bearing, ros::Time const & bearing_timestamp)
+{
+    QString rblabel = "Range: " + QString::number(int(range)) + " m, Bearing: " + QString::number(int(bearing)) + " degs";
+    ui->rangeBearingLineEdit->setText(rblabel);
+
+    ros::Time now = ros::Time::now();
+    QPalette pal = palette();
+    if(now-range_timestamp < ros::Duration(5) && now-bearing_timestamp < ros::Duration(5))
+    {
+        pal.setColor(QPalette::Foreground, Qt::black);
+        pal.setColor(QPalette::Background, Qt::white);
+    }
+    else
+    {
+        pal.setColor(QPalette::Foreground, Qt::darkGray);
+        pal.setColor(QPalette::Background, Qt::yellow);
+    }
+    ui->rangeBearingLineEdit->setPalette(pal);
+}
+
+void ROSDetails::sogUpdate(qreal sog, qreal sog_avg)
+{
+    QString sogLabel = "SOG: " + QString::number(sog,'f',1) + ", avg: " + QString::number(sog_avg,'f',1);
+    ui->sogLineEdit->setText(sogLabel);
 }
