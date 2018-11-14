@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ROSDetails</class>
+ <widget class="QWidget" name="ROSDetails">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>420</width>
+    <height>534</height>
+   </rect>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_2">
+     <item>
+      <widget class="QCheckBox" name="activeCheckBox">
+       <property name="text">
+        <string>Active</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="sogLineEdit">
+       <property name="readOnly">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QPushButton" name="standbyPushButton">
+     <property name="text">
+      <string>Standby</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="surveyPushButton">
+     <property name="text">
+      <string>Survey</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="loiterPushButton">
+     <property name="text">
+      <string>Loiter</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QTextBrowser" name="vehicleStatusTextBrowser"/>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout">
+     <item>
+      <widget class="QLabel" name="sendWaypointIndexLabel">
+       <property name="text">
+        <string>Waypoint Index</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QSpinBox" name="sendWaypointSpinBox"/>
+     </item>
+     <item>
+      <widget class="QPushButton" name="sendWaypointIndexPushButton">
+       <property name="text">
+        <string>Send it!</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QLineEdit" name="rangeBearingLineEdit">
+     <property name="readOnly">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

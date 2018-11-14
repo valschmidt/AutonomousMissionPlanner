@@ -6,6 +6,7 @@
 #include <QFont>
 #include <QBrush>
 #include <QPen>
+#include <QDebug>
 
 GeoGraphicsItem::GeoGraphicsItem(QGraphicsItem *parentItem): QGraphicsItem(parentItem), m_showLabelFlag(false)
 {
@@ -54,6 +55,10 @@ void GeoGraphicsItem::setLabel(const QString &label)
         m_label->setText(m_labelText);
 }
 
+void GeoGraphicsItem::setLabelPosition(QPointF pos)
+{
+    m_label->setPos(pos);
+}
 
 bool GeoGraphicsItem::showLabelFlag() const
 {
@@ -68,4 +73,6 @@ void GeoGraphicsItem::setShowLabelFlag(bool show)
     else
         m_label->setText("");
 }
+
+
 

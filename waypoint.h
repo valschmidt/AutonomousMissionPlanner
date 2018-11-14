@@ -12,15 +12,20 @@ public:
 
     QRectF boundingRect() const;
     void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget);
+    QPainterPath shape() const override;
 
     QGeoCoordinate const &location() const;
     void setLocation(QGeoCoordinate const &location);
     void updateLocation();
 
-    void write(QJsonObject &json) const;
+    void write(QJsonObject &json) const override;
+    void writeToMissionPlan(QJsonArray & navArray) const override;
     void read(const QJsonObject &json);
     
     int type() const {return WaypointType;}
+    
+    QList<QList<QGeoCoordinate> > getLines() const override;
+    
     
 public slots:
     void updateProjectedPoints();

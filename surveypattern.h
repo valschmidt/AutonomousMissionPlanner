@@ -18,10 +18,11 @@ public:
     
     QRectF boundingRect() const;
     void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget);
-    QPainterPath shape() const;
+    QPainterPath shape() const override;
 
-    void write(QJsonObject &json) const;
-    void read(const QJsonObject &json);
+    void write(QJsonObject &json) const override;
+    void writeToMissionPlan(QJsonArray & navArray) const override;
+    void read(const QJsonObject &json) override;
     
     QGeoCoordinate const &startLocation() const;
     Waypoint * startLocationWaypoint() const;
@@ -46,7 +47,7 @@ public:
     void setMaxSegmentLength(double maxLength);
 
     //QList<QGeoCoordinate> getPath() const;
-    QList<QList<QGeoCoordinate> > getLines() const;
+    QList<QList<QGeoCoordinate> > getLines() const override;
     
 signals:
     void surveyPatternUpdated();

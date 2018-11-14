@@ -16,18 +16,20 @@
 #include "waypoint.h"
 #include "trackline.h"
 #include "surveypattern.h"
+#include "surveyarea.h"
 #include "platform.h"
 #include "group.h"
 #include <gdal_priv.h>
 #include "vectordataset.h"
+#include "behavior.h"
 
 #ifdef AMP_ROS
-#include "rosnode.h"
+#include "roslink.h"
 #endif
 
 #include <iostream>
 
-AutonomousVehicleProject::AutonomousVehicleProject(QObject *parent) : QAbstractItemModel(parent), m_currentBackground(nullptr), m_currentPlatform(nullptr), m_currentGroup(nullptr), m_currentSelected(nullptr), m_symbols(new QSvgRenderer(QString(":/symbols.svg"),this))
+AutonomousVehicleProject::AutonomousVehicleProject(QObject *parent) : QAbstractItemModel(parent), m_currentBackground(nullptr), m_currentPlatform(nullptr), m_currentGroup(nullptr), m_currentSelected(nullptr), m_symbols(new QSvgRenderer(QString(":/symbols.svg"),this)), m_map_scale(1.0)
 {
     GDALAllRegister();
 
@@ -38,7 +40,8 @@ AutonomousVehicleProject::AutonomousVehicleProject(QObject *parent) : QAbstractI
     setObjectName("projectModel");
     
 #ifdef AMP_ROS
-    m_currentROSNode = nullptr;
+    m_ROSLink =  new ROSLink(this);
+    connect(this,&AutonomousVehicleProject::backgroundUpdated,m_ROSLink ,&ROSLink::updateBackground);
 #endif
 }
 
@@ -116,6 +119,58 @@ void AutonomousVehicleProject::openGeometry(const QString& fname)
     connect(this,&AutonomousVehicleProject::backgroundUpdated,vd,&VectorDataset::updateProjectedPoints);
 }
 
+void AutonomousVehicleProject::import(const QString& fname)
+{
+    // try Hypack L84 file
+    QFile infile(fname);
+    if(infile.open(QIODevice::ReadOnly|QIODevice::Text))
+    {
+        RowInserter ri(*this,m_currentGroup);
+        Group * hypackGroup = new Group(m_currentGroup);
+        QFileInfo info(fname);
+        hypackGroup->setObjectName(info.fileName());
+        TrackLine * currentLine = nullptr;
+        QTextStream instream(&infile);
+        while(!instream.atEnd())
+        {
+            QString line = instream.readLine();
+            QStringList parts = line.split(" ");
+            if(!parts.empty())
+            {
+                // hypack files seem to have lines that all start with a 3 character identifier
+                if(parts[0].length() == 3)
+                {
+                    qDebug() << parts;
+                    if(parts[0] == "LIN")
+                    {
+                        currentLine = new TrackLine(hypackGroup);
+                        currentLine->setObjectName("trackline");
+                    }
+                    if(parts[0] == "LNN" && currentLine)
+                    {
+                        parts.removeAt(0);
+                        currentLine->setObjectName(parts.join(" "));
+                    }
+                    if(parts[0] == "PTS" && currentLine)
+                    {
+                        for(int i = 1; i < parts.size()-1; i += 2)
+                        {
+                            bool ok = false;
+                            double lat = parts[i].toDouble(&ok);
+                            if(ok)
+                            {
+                                double lon = parts[i+1].toDouble(&ok);
+                                if(ok)
+                                    currentLine->addWaypoint(QGeoCoordinate(lat,lon))->setObjectName("waypoint");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 
 BackgroundRaster *AutonomousVehicleProject::getBackgroundRaster() const
 {
@@ -130,6 +185,13 @@ Platform * AutonomousVehicleProject::createPlatform()
     return p;
 }
 
+Behavior * AutonomousVehicleProject::createBehavior()
+{
+    Behavior *b = potentialParentItemFor("Behavior")->createMissionItem<Behavior>("behavior");
+    return b;
+}
+
+
 Group * AutonomousVehicleProject::addGroup()
 {
     RowInserter ri(*this,m_currentGroup);
@@ -137,21 +199,6 @@ Group * AutonomousVehicleProject::addGroup()
     g->setObjectName("group");
     return g;
 }
-
-
-#ifdef AMP_ROS
-ROSNode * AutonomousVehicleProject::createROSNode()
-{
-    ROSNode *rn = m_root->createMissionItem<ROSNode>("ROS");
-    m_currentROSNode = rn;
-    connect(this,&AutonomousVehicleProject::backgroundUpdated,rn,&ROSNode::updateBackground);
-    return rn;
-}
-#else
-void AutonomousVehicleProject::createROSNode()
-{
-}
-#endif
 
 MissionItem *AutonomousVehicleProject::potentialParentItemFor(std::string const &childType)
 {
@@ -189,6 +236,22 @@ SurveyPattern *AutonomousVehicleProject::addSurveyPattern(QGeoCoordinate positio
     connect(this,&AutonomousVehicleProject::backgroundUpdated,sp,&SurveyPattern::updateBackground);
     return sp;
 }
+
+SurveyArea * AutonomousVehicleProject::createSurveyArea()
+{
+    SurveyArea *sa = potentialParentItemFor("SurveyArea")->createMissionItem<SurveyArea>("area");
+    return sa;
+}
+
+SurveyArea * AutonomousVehicleProject::addSurveyArea(QGeoCoordinate position)
+{
+    SurveyArea *sa = createSurveyArea();
+    sa->setPos(sa->geoToPixel(position,this));
+    sa->addWaypoint(position);
+    connect(this,&AutonomousVehicleProject::backgroundUpdated,sa,&SurveyArea::updateBackground);
+    return sa;
+}
+
 
 TrackLine * AutonomousVehicleProject::createTrackLine()
 {
@@ -265,50 +328,62 @@ void AutonomousVehicleProject::exportHypack(const QModelIndex &index)
     }
 }
 
-void AutonomousVehicleProject::sendToROS(const QModelIndex& index)
+QJsonDocument AutonomousVehicleProject::generateMissionPlan(const QModelIndex& index)
 {
-#ifdef AMP_ROS
-    if(m_currentROSNode)
+    MissionItem *item = itemFromIndex(index);
+    QJsonDocument plan;
+    QJsonObject topLevel;
+    QJsonObject defaultParameters;
+    topLevel["DEFAULT_PARAMETERS"] = defaultParameters;
+    QJsonArray navArray;
+    item->writeToMissionPlan(navArray);
+    topLevel["NAVIGATION"] = navArray;
+    plan.setObject(topLevel);
+    return plan;
+}
+
+void AutonomousVehicleProject::exportMissionPlan(const QModelIndex& index)
+{
+    QString fname = QFileDialog::getSaveFileName(qobject_cast<QWidget*>(QObject::parent()));
+    if(fname.length() > 0)
     {
-        MissionItem *mi = itemFromIndex(index);
-        //QVariant item = m_model->data(index,Qt::UserRole+1);
-        //MissionItem* mi = reinterpret_cast<MissionItem*>(item.value<quintptr>());
-        QString itemType = mi->metaObject()->className();
-        if (itemType == "TrackLine")
+        QJsonDocument plan = generateMissionPlan(index);
+        QFile saveFile(fname);
+        if(saveFile.open(QFile::WriteOnly))
         {
-            TrackLine *tl = qobject_cast<TrackLine*>(mi);
-            QList<QGeoCoordinate> wps;
-            auto waypoints = tl->waypoints();
-            for(auto i: waypoints)
-            {
-                const Waypoint *wp = qgraphicsitem_cast<Waypoint const*>(i);
-                if(wp)
-                {
-                    auto ll = wp->location();
-                    wps.append(ll);
-                }
-            }
-            m_currentROSNode->sendWaypoints(wps);
-        }
-        if (itemType == "SurveyPattern")
-        {
-            SurveyPattern *sp = qobject_cast<SurveyPattern*>(mi);
-            QList<QGeoCoordinate> wps;
-            auto lines = sp->getLines();
-            for (auto l: lines)
-                for (auto p: l)
-                    wps.append(p);
-            m_currentROSNode->sendWaypoints(wps);
-        }
-        if (itemType == "Waypoint")
-        {
-            Waypoint *wp = qobject_cast<Waypoint*>(mi);
-            QList<QGeoCoordinate> wps;
-            wps.append(wp->location());
-            m_currentROSNode->sendWaypoints(wps);
+            saveFile.write(plan.toJson());
         }
     }
+}
+
+void AutonomousVehicleProject::sendToROS(const QModelIndex& index)
+{
+    MissionItem *mi = itemFromIndex(index);
+    QList<QGeoCoordinate> wps;
+    auto lines = mi->getLines();
+    for (auto l: lines)
+        for (auto p: l)
+            wps.append(p);
+
+#ifdef AMP_ROS
+    if(m_ROSLink)
+    {
+        m_ROSLink->sendWaypoints(wps);
+    }
 #endif
+    // mission_plan format
+    QJsonDocument plan = generateMissionPlan(index);
+    
+#ifdef AMP_ROS
+    if(m_ROSLink)
+    {
+        m_ROSLink->sendMissionPlan(plan.toJson());
+    }
+#endif
+
+    GeoGraphicsMissionItem * gmi = qobject_cast<GeoGraphicsMissionItem*>(mi);
+    if(gmi)
+        gmi->lock();
 }
 
 
@@ -367,11 +442,6 @@ void AutonomousVehicleProject::setCurrent(const QModelIndex &index)
             connect(m_currentPlatform,&Platform::speedChanged,[=](){emit currentPlaformUpdated();});
             emit currentPlaformUpdated();
         }
-#ifdef AMP_ROS
-        ROSNode *rn = qobject_cast<ROSNode*>(m_currentSelected);
-        if(rn)
-            m_currentROSNode = rn;
-#endif
         Group *g = qobject_cast<Group*>(m_currentSelected);
         if(g)
             m_currentGroup = g;
@@ -387,6 +457,7 @@ void AutonomousVehicleProject::setCurrentBackground(BackgroundRaster *bgr)
     m_currentBackground = bgr;
     if(bgr)
     {
+        bgr->updateMapScale(m_map_scale);
         m_scene->addItem(bgr);
         emit backgroundUpdated(bgr);
     }
@@ -558,6 +629,20 @@ bool AutonomousVehicleProject::dropMimeData(const QMimeData* data, Qt::DropActio
         
 }
 
+#ifdef AMP_ROS
+ROSLink * AutonomousVehicleProject::rosLink() const
+{
+    return m_ROSLink;
+}
+#endif
+
+void AutonomousVehicleProject::updateMapScale(qreal scale)
+{
+    if(m_currentBackground)
+        m_currentBackground->updateMapScale(scale);
+    m_map_scale = scale;
+    
+}
 
 AutonomousVehicleProject::RowInserter::RowInserter(AutonomousVehicleProject& project, MissionItem* parent):m_project(project)
 {
@@ -568,3 +653,4 @@ AutonomousVehicleProject::RowInserter::~RowInserter()
 {
     m_project.endInsertRows();
 }
+

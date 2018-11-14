@@ -1,5 +1,6 @@
 #include "polygon.h"
 #include <QPainter>
+#include <QDebug>
 
 Polygon::Polygon(MissionItem* parent):GeoGraphicsMissionItem(parent)
 {
@@ -35,6 +36,11 @@ void Polygon::read(const QJsonObject& json)
 void Polygon::write(QJsonObject& json) const
 {
 }
+
+void Polygon::writeToMissionPlan(QJsonArray& navArray) const
+{
+}
+
 
 QPainterPath Polygon::shape() const
 {

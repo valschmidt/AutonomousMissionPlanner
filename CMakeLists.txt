@@ -26,7 +26,7 @@ endif(CMAKE_COMPILER_IS_GNUCXX)
 option(AMP_USE_ROS "Build ROS components")
 
 if(AMP_USE_ROS)
-    find_package(catkin REQUIRED COMPONENTS roscpp asv_msgs)
+    find_package(catkin REQUIRED COMPONENTS roscpp marine_msgs)
     include_directories(${catkin_INCLUDE_DIRS})
     add_definitions(-DAMP_ROS)
 endif()
@@ -58,6 +58,11 @@ set(SOURCES
     polygon.cpp
     geographicsmissionitem.cpp
     modeltest.cpp
+    surveyarea.cpp
+    measuringtool.cpp
+    behavior.cpp
+    behaviordetails.cpp
+    rosdetails.cpp
 )
 
 set(HEADERS
@@ -84,11 +89,16 @@ set(HEADERS
     linestring.h
     polygon.h
     geographicsmissionitem.h
+    surveyarea.h
+    measuringtool.h
+    behavior.h
+    behaviordetails.h
+    rosdetails.h
 )
 
 if(AMP_USE_ROS)
-    list(APPEND SOURCES rosnode.cpp rosnodedetails.cpp)
-    list(APPEND HEADERS rosnode.h rosnodedetails.h)
+    list(APPEND SOURCES roslink.cpp )
+    list(APPEND HEADERS roslink.h)
 endif()
 
 set ( RESOURCES

@@ -7,6 +7,7 @@
 #include "surveypattern.h"
 #include "platform.h"
 #include "backgroundraster.h"
+#include "behavior.h"
 
 MissionItem::MissionItem(QObject *parent) : QObject(parent)
 {
@@ -35,6 +36,15 @@ void MissionItem::updateProjectedPoints()
 const QList<MissionItem *> & MissionItem::childMissionItems() const
 {
     return m_childrenMissionItems;
+}
+
+QList<QList<QGeoCoordinate> > MissionItem::getLines() const
+{
+    QList<QList<QGeoCoordinate> > ret;
+    for(auto mi:m_childrenMissionItems)
+        for(auto line: mi->getLines())
+            ret.append(line);
+    return ret;
 }
 
 
@@ -92,10 +102,23 @@ QGraphicsItem * MissionItem::findParentGraphicsItem()
 
 bool MissionItem::canAcceptChildType(const std::string& childType) const
 {
-    return false;
+    return childType == "Behavior";
 }
 
 void MissionItem::removeChildMissionItem(MissionItem* cmi)
 {
     m_childrenMissionItems.removeAll(cmi);
+}
+
+void MissionItem::writeBehaviorsToMissionPlanObject(QJsonObject& missionObject) const
+{
+    QJsonObject behaviorsObject;
+    for(auto mi: m_childrenMissionItems)
+    {
+        Behavior *b = qobject_cast<Behavior*>(mi);
+        if(b)
+            b->writeToMissionPlanObject(behaviorsObject);
+    }
+    if(!behaviorsObject.empty())
+        missionObject["behaviors"] = behaviorsObject;
 }
