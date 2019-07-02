@@ -20,7 +20,7 @@
 #include "platform.h"
 #include "group.h"
 #include <gdal_priv.h>
-#include "vectordataset.h"
+#include "vector/vectordataset.h"
 #include "behavior.h"
 
 #ifdef AMP_ROS
@@ -190,6 +190,7 @@ Platform * AutonomousVehicleProject::createPlatform()
     RowInserter ri(*this,m_currentGroup);
     Platform *p = new Platform(m_currentGroup);
     p->setObjectName("platform");
+    m_currentPlatform = p;
     return p;
 }
 
@@ -317,7 +318,6 @@ void AutonomousVehicleProject::exportHypack(const QModelIndex &index)
             QFile outfile(fname);
             if(outfile.open(QFile::WriteOnly))
             {
-                int arcCount = sp->arcCount();
                 auto lines = sp->getLines();
                 QTextStream outstream(&outfile);
                 outstream.setRealNumberPrecision(8);

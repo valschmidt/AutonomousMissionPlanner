@@ -26,11 +26,19 @@ endif(CMAKE_COMPILER_IS_GNUCXX)
 option(AMP_USE_ROS "Build ROS components")
 
 if(AMP_USE_ROS)
-    find_package(catkin REQUIRED COMPONENTS roscpp marine_msgs)
+    find_package(catkin REQUIRED COMPONENTS roscpp marine_msgs geographic_visualization_msgs)
     include_directories(${catkin_INCLUDE_DIRS})
     add_definitions(-DAMP_ROS)
 endif()
 
+find_package(Doxygen)
+
+if (DOXYGEN_FOUND)
+    doxygen_add_docs(
+        docs
+        ${PROJECT_SOURCE_DIR}
+    )
+endif()
 
 set(SOURCES
     main.cpp
@@ -51,11 +59,11 @@ set(SOURCES
     missionitem.cpp
     platformdetails.cpp
     backgrounddetails.cpp
-    vectordataset.cpp
+    vector/vectordataset.cpp
     group.cpp
-    point.cpp
-    linestring.cpp
-    polygon.cpp
+    vector/point.cpp
+    vector/linestring.cpp
+    vector/polygon.cpp
     geographicsmissionitem.cpp
     modeltest.cpp
     surveyarea.cpp
@@ -83,11 +91,11 @@ set(HEADERS
     missionitem.h
     platformdetails.h
     backgrounddetails.h
-    vectordataset.h
+    vector/vectordataset.h
     group.h
-    point.h
-    linestring.h
-    polygon.h
+    vector/point.h
+    vector/linestring.h
+    vector/polygon.h
     geographicsmissionitem.h
     surveyarea.h
     measuringtool.h
